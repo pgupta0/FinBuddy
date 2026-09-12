@@ -54,14 +54,15 @@ cp env.template .env.local
 
 The app refuses to boot with no provider key at all. Which vendor answers a
 request is set by `DEFAULT_VENDOR` in `config.ts`, falling back through
-`PROVIDER_FALLBACK_ORDER` to whichever keys actually exist. So the same code
-runs on a single free Gemini key locally and on Anthropic in production, with no
-code change.
+`PROVIDER_FALLBACK_ORDER` to whichever keys actually exist. The app runs on
+Google Gemini by default (free tier); switching to Anthropic, OpenAI, or
+Fireworks is a two-line change in `config.ts` plus that vendor's key — no other
+file needs editing.
 
 | Variable | Source | Notes |
 |----------|--------|-------|
-| `ANTHROPIC_API_KEY` | [console.anthropic.com](https://console.anthropic.com) | The configured default vendor |
-| `GOOGLE_GENERATIVE_AI_API_KEY` | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) | **Free tier, no card required.** Limits are per-minute *and* per-day, so keep a second key set as fallback for demos |
+| `GOOGLE_GENERATIVE_AI_API_KEY` | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) | **The configured default vendor. Free tier, no card required.** Limits are per-minute *and* per-day, so keep a second key set as fallback for demos |
+| `ANTHROPIC_API_KEY` | [console.anthropic.com](https://console.anthropic.com) | Optional switchable provider |
 | `OPENAI_API_KEY` | [platform.openai.com](https://platform.openai.com/api-keys) | OpenAI chat models, or `MODERATION_PROVIDER=openai` |
 | `FIREWORKS_API_KEY` | [fireworks.ai](https://fireworks.ai) | Open-source models (DeepSeek, Kimi) |
 
@@ -81,7 +82,6 @@ code change.
 
 | Variable | Purpose |
 |----------|---------|
-| `GROWW_API_KEY`, `GROWW_TOTP_SECRET` | Live reference prices in the fund cards (needs a paid Groww Trading API subscription). Missing or failing degrades silently to "no live data" |
 | `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | Shared rate-limit counter (free tier, no npm package). Without these the limiter is per-instance — see [Rate Limiting](#rate-limiting). Set both or neither |
 
 **Optional feature switches** (no key needed — just set the value):
@@ -288,33 +288,33 @@ the compaction layer contain no vendor names at all.
 
 | Parameter | Default | Options |
 |-----------|---------|---------|
-| `DEFAULT_VENDOR` | `"anthropic"` | `"anthropic"`, `"google"`, `"openai"`, `"fireworks"` |
-| `DEFAULT_MODEL_ID` | `"claude-haiku-4-5"` | Any id in that vendor's catalog |
-| `PROVIDER_FALLBACK_ORDER` | anthropic → google → openai → fireworks | Order tried when the configured vendor has no key set |
+| `DEFAULT_VENDOR` | `"google"` | `"anthropic"`, `"google"`, `"openai"`, `"fireworks"` |
+| `DEFAULT_MODEL_ID` | `"gemini-3.5-flash"` | Any id in that vendor's catalog |
+| `PROVIDER_FALLBACK_ORDER` | google → openai → fireworks → anthropic | Order tried when the configured vendor has no key set |
 | `DEFAULT_MODE` | `"chat"` | `"chat"`, `"reasoning"` |
 | `DEFAULT_THINKING_LEVEL` | `"medium"` | `"off"`, `"low"`, `"medium"`, `"high"` — used when reasoning mode is triggered |
 | `CHAT_THINKING_LEVEL` | `"low"` | Thinking level in plain chat mode |
 | `MAX_OUTPUT_TOKENS` | `undefined` | Optional response-token cap; `undefined` = provider default. If set with Anthropic thinking enabled, must exceed the thinking budget in use |
-| `UTILITY_VENDOR` | `"anthropic"` | Vendor for background tasks (moderation classifier, compaction summaries) |
-| `UTILITY_MODEL_ID` | `"claude-haiku-4-5"` | A fast, cheap model — e.g. `gemini-3.5-flash-lite`, `gpt-5.4-mini` |
+| `UTILITY_VENDOR` | `"google"` | Vendor for background tasks (moderation classifier, compaction summaries) |
+| `UTILITY_MODEL_ID` | `"gemini-3.5-flash-lite"` | A fast, cheap model — e.g. `claude-haiku-4-5` (anthropic), `gpt-5.4-mini` (openai) |
 
 The chat model and the utility model are independent: run chat on one vendor and
 background tasks on another, or set both to the same vendor to switch providers
 completely (only that vendor's key is then needed).
 
-**Running entirely on the Gemini free tier** (useful for local development):
+**Switching to Anthropic instead** (or any other vendor):
 
 ```ts
 // config.ts
-export const DEFAULT_VENDOR: Vendor = "google";
-export const DEFAULT_MODEL_ID = "gemini-3.5-flash";
-export const UTILITY_VENDOR: Vendor = "google";
-export const UTILITY_MODEL_ID = "gemini-3.5-flash-lite";
+export const DEFAULT_VENDOR: Vendor = "anthropic";
+export const DEFAULT_MODEL_ID = "claude-haiku-4-5";
+export const UTILITY_VENDOR: Vendor = "anthropic";
+export const UTILITY_MODEL_ID = "claude-haiku-4-5";
 ```
 
-…with `GOOGLE_GENERATIVE_AI_API_KEY` set. Or change nothing at all: with only
-that key present, `PROVIDER_FALLBACK_ORDER` resolves to Gemini and logs a warning
-saying so. `DEFAULT_VENDOR` stays `anthropic` in the committed configuration.
+…with `ANTHROPIC_API_KEY` set. Or change nothing at all: with only that key
+present, `PROVIDER_FALLBACK_ORDER` resolves to Anthropic and logs a warning
+saying so.
 
 **Model catalog** (`lib/ai/providers.ts`). Deliberately limited to
 cost-appropriate chatbot tiers — premium models are excluded because their
@@ -322,11 +322,11 @@ per-request cost makes no sense for a public-facing educational chatbot.
 
 | Vendor | Model ID | Tier | Notes |
 |--------|----------|------|-------|
-| anthropic | `claude-haiku-4-5` | economy | **Default.** Fast; thinking budget separate from output tokens |
+| google | `gemini-3.5-flash-lite` | economy | Cheapest; good utility model |
+| google | `gemini-3.5-flash` | economy | **Default.** Free-tier eligible chat model |
+| anthropic | `claude-haiku-4-5` | economy | Fast; thinking budget separate from output tokens |
 | anthropic | `claude-sonnet-4-6` | standard | 1M context |
 | anthropic | `claude-sonnet-5` | standard | Best speed/intelligence balance |
-| google | `gemini-3.5-flash-lite` | economy | Cheapest; good utility model |
-| google | `gemini-3.5-flash` | economy | Default Gemini chat model |
 | google | `gemini-3.8-flash` | standard | Newer Flash generation |
 | google | `gemini-2.5-flash` | economy | Older stable line |
 | google | `gemini-2.5-pro` | premium | Use sparingly |
@@ -764,7 +764,7 @@ npm run test:watch # Watch mode tests
 
 - **Framework:** Next.js 16 (Turbopack)
 - **AI SDK:** Vercel AI SDK v6 (streaming)
-- **LLMs:** Anthropic Claude (default), Google Gemini, OpenAI GPT, Fireworks — one pluggable registry (`lib/ai/providers.ts`)
+- **LLMs:** Google Gemini (default), Anthropic Claude, OpenAI GPT, Fireworks — one pluggable registry (`lib/ai/providers.ts`)
 - **Vector DB:** Pinecone (integrated inference + hosted reranking)
 - **Web Search:** Exa API (deep search)
 - **Moderation:** LLM classifier on the utility model (default) or OpenAI Moderation API

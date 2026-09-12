@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 import type { FundRecommendationsOutput } from "@/app/api/chat/tools/fund-recommendations";
 import type { FundOption, Holding, RiskTierProfile } from "@/lib/fund-recommendations-data";
@@ -24,96 +24,6 @@ function formatWeight(weightPct: number): string {
   return Number.isInteger(weightPct) ? `${weightPct}%` : `${weightPct.toFixed(2).replace(/0$/, "").replace(/\.$/, "")}%`;
 }
 
-function formatPrice(n: number): string {
-  return `₹${n.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
-}
-
-/**
- * Best-effort live LAST-TRADED PRICE for holdings with a real NSE ticker
- * (see lib/fund-recommendations-data.ts). Fetches once for every ticker
- * shown in this card in a single batched request; if the feature is off,
- * credentials aren't set up, or the request fails, `prices` just stays
- * empty and every holding renders exactly as it did before this feature
- * existed — no error shown to the user.
- */
-function useHoldingPrices(funds: FundOption[]): Record<string, number> {
-  const [prices, setPrices] = useState<Record<string, number>>({});
-
-  const symbols = Array.from(
-    new Set(
-      funds.flatMap((f) => f.topHoldings.map((h) => h.ticker?.tradingSymbol).filter((s): s is string => Boolean(s)))
-    )
-  ).sort();
-  const symbolsKey = symbols.join(",");
-
-  useEffect(() => {
-    if (!symbolsKey) return;
-    let cancelled = false;
-    fetch(`/api/holdings-price?symbols=${encodeURIComponent(symbolsKey)}`)
-      .then((res) => res.json())
-      .then((data: { available?: boolean; prices?: Record<string, number> }) => {
-        if (!cancelled && data.available && data.prices) setPrices(data.prices);
-      })
-      .catch(() => {
-        // Live prices are a decoration only — silently keep showing holdings
-        // without a price rather than surfacing a fetch error.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [symbolsKey]);
-
-  return prices;
-}
-
-interface QuoteInfo {
-  lastPrice?: number;
-  dayChange?: number;
-  dayChangePct?: number;
-  open?: number;
-  high?: number;
-  low?: number;
-  prevClose?: number;
-  volume?: number;
-  week52High?: number;
-  week52Low?: number;
-}
-
-/**
- * Lazy, per-symbol "basic stock info" fetch (day change, OHLC, 52-week
- * range) via Groww's single-symbol quote endpoint — see
- * app/api/holdings-quote/route.ts for why this can't be batched the way the
- * LTP feed above is. Only fires when the user actually expands a holding,
- * and caches per symbol for the life of the card so re-expanding is instant.
- */
-function useStockQuote(symbol: string | null) {
-  const [quotes, setQuotes] = useState<Record<string, QuoteInfo | null>>({});
-
-  useEffect(() => {
-    if (!symbol || symbol in quotes) return;
-    let cancelled = false;
-    fetch(`/api/holdings-quote?symbol=${encodeURIComponent(symbol)}`)
-      .then((res) => res.json())
-      .then((data: { available?: boolean; quote?: QuoteInfo }) => {
-        if (cancelled) return;
-        setQuotes((prev) => ({ ...prev, [symbol]: data.available && data.quote ? data.quote : null }));
-      })
-      .catch(() => {
-        if (!cancelled) setQuotes((prev) => ({ ...prev, [symbol]: null }));
-      });
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [symbol]);
-
-  // Derived rather than a separate effect-set state: still loading whenever
-  // a symbol is expanded but its entry hasn't landed in `quotes` yet.
-  const loading = symbol !== null && !(symbol in quotes);
-
-  return { quotes, loading };
-}
-
 const CATEGORY_STYLE: Record<Holding["category"], string> = {
   equity: "border-border bg-muted/40 text-muted-foreground",
   reit_invit: "border-border bg-muted/40 text-muted-foreground",
@@ -121,111 +31,23 @@ const CATEGORY_STYLE: Record<Holding["category"], string> = {
   other: "border-border/60 bg-muted/15 text-muted-foreground/70",
 };
 
-function HoldingChip({
-  holding,
-  livePrice,
-  expanded,
-  onToggle,
-  quote,
-  quoteLoading,
-}: {
-  holding: Holding;
-  livePrice?: number;
-  expanded: boolean;
-  onToggle: () => void;
-  quote?: QuoteInfo | null;
-  quoteLoading: boolean;
-}) {
-  const clickable = Boolean(holding.ticker);
-
+function HoldingChip({ holding }: { holding: Holding }) {
   return (
-    <div className="flex flex-col gap-1">
-      <button
-        type="button"
-        disabled={!clickable}
-        onClick={clickable ? onToggle : undefined}
-        className={cn(
-          "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] leading-snug transition-colors",
-          CATEGORY_STYLE[holding.category],
-          clickable && "cursor-pointer hover:border-foreground/30",
-          !clickable && "cursor-default"
-        )}
-        title={clickable ? "Tap for basic stock info (Groww live data)" : undefined}
-      >
-        <span>{holding.name}</span>
-        <span className="font-mono">{formatWeight(holding.weightPct)}</span>
-        {livePrice !== undefined && (
-          <span className="font-mono font-medium text-foreground">{formatPrice(livePrice)}</span>
-        )}
-      </button>
-
-      {expanded && clickable && (
-        <div className="rounded-md border border-border/60 bg-background px-2 py-1.5 text-[10px] leading-relaxed text-muted-foreground">
-          {quoteLoading && "Loading live info…"}
-          {!quoteLoading && quote === null && "Live info unavailable right now."}
-          {!quoteLoading && quote && (
-            <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 font-mono">
-              {quote.lastPrice !== undefined && (
-                <span>
-                  LTP <span className="text-foreground">{formatPrice(quote.lastPrice)}</span>
-                </span>
-              )}
-              {quote.dayChangePct !== undefined && (
-                <span className={quote.dayChangePct >= 0 ? "text-[var(--band-growth)]" : "text-destructive"}>
-                  Day {quote.dayChangePct >= 0 ? "+" : ""}
-                  {quote.dayChangePct.toFixed(2)}%
-                </span>
-              )}
-              {quote.open !== undefined && (
-                <span>
-                  Open <span className="text-foreground">{formatPrice(quote.open)}</span>
-                </span>
-              )}
-              {quote.prevClose !== undefined && (
-                <span>
-                  Prev close <span className="text-foreground">{formatPrice(quote.prevClose)}</span>
-                </span>
-              )}
-              {quote.high !== undefined && quote.low !== undefined && (
-                <span>
-                  Day range{" "}
-                  <span className="text-foreground">
-                    {formatPrice(quote.low)}–{formatPrice(quote.high)}
-                  </span>
-                </span>
-              )}
-              {quote.week52High !== undefined && quote.week52Low !== undefined && (
-                <span>
-                  52W range{" "}
-                  <span className="text-foreground">
-                    {formatPrice(quote.week52Low)}–{formatPrice(quote.week52High)}
-                  </span>
-                </span>
-              )}
-            </div>
-          )}
-          <p className="mt-1 text-[9px] italic text-muted-foreground/70">
-            Live market data, reference only — not a recommendation to trade this stock directly.
-          </p>
-        </div>
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] leading-snug",
+        CATEGORY_STYLE[holding.category]
       )}
-    </div>
+    >
+      <span>{holding.name}</span>
+      <span className="font-mono">{formatWeight(holding.weightPct)}</span>
+    </span>
   );
 }
 
-function FundRow({
-  fund,
-  token,
-  livePrices,
-}: {
-  fund: FundOption;
-  token: string;
-  livePrices: Record<string, number>;
-}) {
+function FundRow({ fund, token }: { fund: FundOption; token: string }) {
   const hasAllocation = fund.equityPct !== undefined;
   const [showAll, setShowAll] = useState(false);
-  const [expandedHolding, setExpandedHolding] = useState<string | null>(null);
-  const { quotes, loading } = useStockQuote(expandedHolding);
 
   const visibleHoldings = showAll ? fund.topHoldings : fund.topHoldings.slice(0, COLLAPSED_HOLDING_COUNT);
   const hiddenCount = fund.topHoldings.length - visibleHoldings.length;
@@ -289,21 +111,9 @@ function FundRow({
             <span className="text-[10px] text-muted-foreground/75">{fund.holdingsCoverageNote}</span>
           </div>
           <div className="flex flex-wrap gap-1.5">
-            {visibleHoldings.map((holding) => {
-              const symbol = holding.ticker?.tradingSymbol;
-              const key = `${holding.name}-${holding.weightPct}`;
-              return (
-                <HoldingChip
-                  key={key}
-                  holding={holding}
-                  livePrice={symbol ? livePrices[symbol] : undefined}
-                  expanded={Boolean(symbol) && expandedHolding === symbol}
-                  onToggle={() => symbol && setExpandedHolding((cur) => (cur === symbol ? null : symbol))}
-                  quote={symbol ? quotes[symbol] : undefined}
-                  quoteLoading={Boolean(symbol) && symbol === expandedHolding && loading}
-                />
-              );
-            })}
+            {visibleHoldings.map((holding) => (
+              <HoldingChip key={`${holding.name}-${holding.weightPct}`} holding={holding} />
+            ))}
           </div>
           {hiddenCount > 0 && (
             <button
@@ -340,8 +150,6 @@ function FundRow({
 
 export function FundRecommendationsCard({ output }: { output: FundRecommendationsOutput }) {
   const token = TIER_TOKEN[output.profile];
-  const livePrices = useHoldingPrices(output.funds);
-  const showingLivePrices = Object.keys(livePrices).length > 0;
 
   return (
     <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card px-4 py-4 sm:px-5">
@@ -371,15 +179,13 @@ export function FundRecommendationsCard({ output }: { output: FundRecommendation
 
       <div className="flex flex-col gap-2">
         {output.funds.map((fund) => (
-          <FundRow key={`${fund.amc}-${fund.schemeName}`} fund={fund} token={token} livePrices={livePrices} />
+          <FundRow key={`${fund.amc}-${fund.schemeName}`} fund={fund} token={token} />
         ))}
       </div>
 
       <p className="text-[10px] leading-relaxed text-muted-foreground/75">
         Figures are point-in-time snapshots and drift over time — check each fund&rsquo;s current factsheet before
         acting. Shown for educational comparison, not a recommendation to buy any specific scheme.
-        {showingLivePrices &&
-          " Holding prices and any stock info shown are live market data for reference only — not a recommendation to trade those securities directly."}
       </p>
     </div>
   );

@@ -38,26 +38,29 @@ export const BROWSER_TAB_TITLE = `${AI_NAME}`;
 export const WELCOME_MESSAGE = `Hi, I'm ${AI_NAME}. I help you understand how your savings are allocated and compare that to common investment strategies — think of me as a financial literacy tool, not a financial adviser.`;
 export const CLEAR_CHAT_TEXT = "New";
 
-// --- Provider defaults (PROF REQUIREMENT: Anthropic by default) ---
+// --- Provider defaults ---
 // Four vendors are supported — anthropic, openai, google (Gemini), fireworks —
 // each defined once in lib/ai/providers.ts. Switching vendor is two lines here
 // plus that vendor's API key; no other file needs editing.
-export const DEFAULT_VENDOR: Vendor = "anthropic";
+// Running on Gemini (google) by default — it's the free-tier key this
+// deployment actually has configured. Anthropic, OpenAI and Fireworks stay
+// fully wired up as switchable options; add the matching API key and change
+// DEFAULT_VENDOR (and UTILITY_VENDOR below) to use one of them instead.
+export const DEFAULT_VENDOR: Vendor = "google";
 
-// Claude Haiku 4.5: cost-efficient, and its thinking budget is counted
-// separately from output tokens.
-export const DEFAULT_MODEL_ID = "claude-haiku-4-5";
+// gemini-3.5-flash: fast and free-tier eligible.
+export const DEFAULT_MODEL_ID = "gemini-3.5-flash";
 
 // Order tried when DEFAULT_VENDOR (or UTILITY_VENDOR) has no API key set.
-// This is what lets the same codebase run on a free Gemini key alone for local
-// development while production stays on Anthropic — nothing to edit, just a
-// different key in .env.local. It does NOT retry a request that failed
-// mid-stream; see resolveVendor() in lib/ai/model-registry.ts for why.
+// This is what lets the same codebase fall back to whichever provider key is
+// actually configured — nothing to edit, just a different key in .env.local
+// or your host's environment variables. It does NOT retry a request that
+// failed mid-stream; see resolveVendor() in lib/ai/model-registry.ts for why.
 export const PROVIDER_FALLBACK_ORDER: Vendor[] = [
-  "anthropic",
   "google",
   "openai",
   "fireworks",
+  "anthropic",
 ];
 
 export const DEFAULT_MODE = "chat" as const; // "chat" | "reasoning"
@@ -70,11 +73,11 @@ export const DEFAULT_THINKING_LEVEL = "medium" as const; // "off" | "low" | "med
 // conversation compaction summaries. Independent of the chat model above, so you
 // can run chat and utilities on different vendors — or switch everything to one
 // vendor. The API key for the chosen vendor must be set.
-export const UTILITY_VENDOR: Vendor = "anthropic";
+export const UTILITY_VENDOR: Vendor = "google";
 // Must be a model id listed for UTILITY_VENDOR in lib/ai/providers.ts; if it
 // isn't, that vendor's own defaultUtilityModelId is used instead.
-// e.g. "gemini-3.5-flash-lite" (google), "gpt-5.4-mini" (openai).
-export const UTILITY_MODEL_ID = "claude-haiku-4-5";
+// e.g. "claude-haiku-4-5" (anthropic), "gpt-5.4-mini" (openai).
+export const UTILITY_MODEL_ID = "gemini-3.5-flash-lite";
 
 // --- Moderation denial messages ---
 export const MODERATION_DENIAL_MESSAGE_SEXUAL =
@@ -313,16 +316,3 @@ export const ENABLE_WEB_SEARCH =
 // and PINECONE_API_KEY is not needed. The bot answers from general knowledge (+ web search if enabled).
 export const ENABLE_VECTOR_SEARCH =
   process.env.ENABLE_VECTOR_SEARCH?.toLowerCase() !== "false";
-
-// Show a live reference price next to real stock/REIT/InvIT holdings in the
-// fund-recommendation cards (app/api/holdings-price/route.ts), and let the
-// user tap a holding for basic live stock info — day change, OHLC, 52-week
-// range (app/api/holdings-quote/route.ts). Off by default — the card works
-// fully without either. Enabling it requires a paid Groww Trading API
-// subscription plus GROWW_API_KEY/GROWW_TOTP_SECRET env vars (see
-// lib/groww-auth.ts); with the flag on but those vars missing, or on any
-// upstream failure, both features degrade silently to "no live data" rather
-// than breaking the card. Purely a UI decoration — never seen or narrated
-// by the model.
-export const ENABLE_LIVE_HOLDING_PRICES =
-  process.env.ENABLE_LIVE_HOLDING_PRICES?.toLowerCase() === "true";

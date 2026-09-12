@@ -35,7 +35,6 @@ the note in [`README.md`](README.md) are that acknowledgement.
   and source URLs (`lib/fund-recommendations-data.ts`,
   `app/api/chat/tools/fund-recommendations.ts`)
 - The Indian financial-literacy knowledge base (`RAGloader/content/`)
-- Groww live-price integration (`lib/groww-auth.ts`, `app/api/holdings-*`)
 - The forced-KB-search safety net (`lib/ai/kb-keywords.ts`)
 - The multi-provider abstraction (`lib/ai/providers.ts`) and the retrieval
   rework in `lib/pinecone.ts`
@@ -70,7 +69,6 @@ incidental — see `DOCUMENTATION.md`.
 | Anthropic, Google (Gemini), OpenAI, Fireworks | Chat and background models |
 | Pinecone | Vector storage, retrieval, and hosted reranking |
 | Exa | Web search |
-| Groww Trading API | Optional live reference prices |
 | Vercel | Hosting |
 | Upstash Redis | Optional shared rate-limit counter |
 

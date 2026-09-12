@@ -145,9 +145,8 @@ Expected net value
 | Fund Recommendations Engine | After scoring, the assistant looks up and presents 5 real, currently active Indian mutual funds for that risk tier — real allocation %, 3Y/5Y returns, riskometer, expense ratio, actual disclosed holdings, cited source — instead of the model naming funds from memory | Impact (concrete, comparable real examples) → Value generation (this is the moment a user can act on informed comparison, the core promise of the product) | `app/api/chat/tools/fund-recommendations.ts`, `lib/fund-recommendations-data.ts` (20 funds, 5 per tier), `components/messages/fund-recommendations-card.tsx` |
 | Voice Input (Dictation) | A mic button dictates into the message box via the browser's built-in Web Speech API — no new API key, no added cost | Adoption (lowers input friction, especially on mobile) | `hooks/use-speech-recognition.ts`, wired into `app/page.tsx` |
 | File / Image Attachments | Up to 3 images, PDFs, or CSV/text files per message — e.g. a screenshot of a portfolio statement — read natively by the model (images/PDFs) or folded into the message text (CSV/text) | Adoption (removes the need to manually type out portfolio details) → ties into the guardrail requiring the user to confirm any uploaded-statement holding before it's treated as fact | `lib/attachments.ts`, `app/api/chat/route.ts` (server-side validation), `config.ts` (size/count limits) |
-| Live Holding Price (optional) | Tapping a real stock/REIT/InvIT holding under a recommended fund can show its live reference price via the Groww Trading API — purely a UI decoration the model never sees or narrates, so it carries none of the hallucination risk the rest of the app is built around | Impact (more concrete, current context for holdings shown) | `lib/groww-auth.ts`, `app/api/holdings-price/route.ts`, `app/api/holdings-quote/route.ts`, gated by `ENABLE_LIVE_HOLDING_PRICES` |
 
-Design notes: the risk quiz and fund-recommendation tool are deliberately deterministic (plain TypeScript functions, not the LLM) because the single biggest observed failure mode in this class of assistant is a hallucinated number — a demo of this exact problem (a misspelled stock name triggering a fabricated return forecast) is documented in C6 and is the reason the second guardrail layer exists on top of the tools themselves. Voice input and attachments were deliberately built on browser-native/already-available APIs (Web Speech API, native file reading) rather than a new paid service, keeping the cost model unchanged. The live-holding-price feature was deliberately left optional/off-by-default and fails silently, since it is the one feature that depends on a third-party trading account the team may not always have active — a decision to keep the core product working even if that dependency is unavailable.
+Design notes: the risk quiz and fund-recommendation tool are deliberately deterministic (plain TypeScript functions, not the LLM) because the single biggest observed failure mode in this class of assistant is a hallucinated number — a demo of this exact problem (a misspelled stock name triggering a fabricated return forecast) is documented in C6 and is the reason the second guardrail layer exists on top of the tools themselves. Voice input and attachments were deliberately built on browser-native/already-available APIs (Web Speech API, native file reading) rather than a new paid service, keeping the cost model unchanged.
 
 ---
 
@@ -169,14 +168,13 @@ app/api/chat/route.ts  (Next.js API route, Vercel serverless)    [inherited, ext
     ├─▶ Attachment validation (size/count caps)                         [added]
     │
     ▼
-Claude (Anthropic, claude-haiku-4-5 default) via @ai-sdk/anthropic      [inherited]
+Pluggable LLM registry (Gemini default, Anthropic/OpenAI/Fireworks switchable) [reworked]
     │  tool-calling loop (MAX_STEPS = 8)
     ├─▶ vectorDatabaseSearch → Pinecone (parent-child + propositions)   [inherited, new KB content]
     ├─▶ webSearch → Exa (SEBI/AMFI/RBI-preferred sources)               [inherited]
     ├─▶ presentRiskQuiz (client-side tool, no execute)                  [added]
     ├─▶ scoreRiskProfile (deterministic scoring)                        [added]
-    ├─▶ fundRecommendations (deterministic lookup)                      [added]
-    └─▶ holdingsPrice / holdingsQuote → Groww API (optional)            [added]
+    └─▶ fundRecommendations (deterministic lookup)                      [added]
     │
     ▼
 Streamed response + citations + structured result cards → browser
@@ -210,9 +208,7 @@ Conversation state (messages, feedback, compaction summaries) is stored client-s
 
 **Voice Input** — `hooks/use-speech-recognition.ts` wraps the browser's `SpeechRecognition`/`webkitSpeechRecognition` API directly; the mic button only renders when `isSupported` is true, so unsupported browsers see no broken control. Dictated text is appended to whatever's already typed rather than replacing it.
 
-**File / Image Attachments** — `lib/attachments.ts` classifies each file (image / pdf / text) and either turns it into a native `FileUIPart` (images, PDFs — Claude reads these directly) or folds its text content into the message body (CSV/plain text, since the chat API has no generic "document" concept for that). Both the client (`lib/attachments.ts`) and the server (`app/api/chat/route.ts`) independently enforce a per-file size cap (2MB) and per-message file count (3), sized so the combined request stays under Vercel's ~4.5MB serverless body limit once base64 overhead is accounted for.
-
-**Live Holding Price** — `lib/groww-auth.ts` implements Groww's Trading API TOTP auth by hand (RFC 6238, via Node's built-in `crypto`) rather than adding a dependency. It's called only when `ENABLE_LIVE_HOLDING_PRICES=true` and both `GROWW_API_KEY`/`GROWW_TOTP_SECRET` are set; any missing credential or upstream failure returns `null`, and callers degrade to "no live data" rather than throwing — deliberately, since this is a paid third-party dependency the team may not always have active.
+**File / Image Attachments** — `lib/attachments.ts` classifies each file (image / pdf / text) and either turns it into a native `FileUIPart` (images, PDFs — the model reads these directly) or folds its text content into the message body (CSV/plain text, since the chat API has no generic "document" concept for that). Both the client (`lib/attachments.ts`) and the server (`app/api/chat/route.ts`) independently enforce a per-file size cap (2MB) and per-message file count (3), sized so the combined request stays under Vercel's ~4.5MB serverless body limit once base64 overhead is accounted for.
 
 ### C4. Interface and Experience
 
@@ -256,14 +252,13 @@ Two guardrail changes were made after real testing surfaced gaps (see C6 for the
 
 **Other known limitations:**
 - Two credentials (Pinecone, Unstructured.io) that were briefly hardcoded in `RAGloader/RAG_loader_pipeline.ipynb` earlier in development were removed and the code now reads them from the environment instead (see the "Stop hardcoding API keys" commit), but the old values remain in this repository's git history and should be treated as compromised until rotated in each provider's dashboard — tracked here rather than silently ignored.
-- Live holding prices depend on an optional, paid Groww Trading API subscription and are off by default; without it the fund cards work identically minus that one decoration.
 
 ### C7. Running and Deploying
 
 **Environment variables** (names only — see `env.template` for the full annotated list):
-- Required: `ANTHROPIC_API_KEY`
-- Optional: `OPENAI_API_KEY`, `PINECONE_API_KEY`, `EXA_API_KEY`, `FIREWORKS_API_KEY`, `GROWW_API_KEY`, `GROWW_TOTP_SECRET`, `SUMMARY_HMAC_SECRET`, `HEALTH_CHECK_TOKEN`
-- Feature switches: `ENABLE_VECTOR_SEARCH`, `ENABLE_WEB_SEARCH`, `ENABLE_LIVE_HOLDING_PRICES`, `MODERATION_PROVIDER`
+- Required: at least one LLM provider key (default vendor is Google Gemini: `GOOGLE_GENERATIVE_AI_API_KEY`), plus `PINECONE_API_KEY` and `EXA_API_KEY` unless their features are disabled
+- Optional: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `FIREWORKS_API_KEY`, `SUMMARY_HMAC_SECRET`, `HEALTH_CHECK_TOKEN`
+- Feature switches: `ENABLE_VECTOR_SEARCH`, `ENABLE_WEB_SEARCH`, `MODERATION_PROVIDER`
 
 **Local setup:**
 ```bash
