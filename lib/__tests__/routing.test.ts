@@ -49,7 +49,10 @@ describe("routeRequest", () => {
   it("defaults to chat mode for simple queries", () => {
     const result = routeRequest(makeMessages("What is an expense ratio?"));
     expect(result.mode).toBe("chat");
-    expect(result.vendor).toBe("anthropic");
+    // DEFAULT_VENDOR in config.ts — currently "google" (Gemini). No provider
+    // key is set in the test environment, so resolveVendor() returns the
+    // configured default unchanged rather than falling back to anything else.
+    expect(result.vendor).toBe("google");
   });
 
   it("stays in chat mode for a plain glossary lookup", () => {

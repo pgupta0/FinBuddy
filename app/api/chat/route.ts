@@ -7,7 +7,7 @@ import {
   createUIMessageStream,
   createUIMessageStreamResponse,
 } from "ai";
-import "@/lib/env";
+import { ensureEnv } from "@/lib/env";
 import { SYSTEM_PROMPT } from "@/prompts";
 import { isContentFlagged } from "@/lib/moderation";
 import {
@@ -95,6 +95,17 @@ function createPlainTextResponse(message: string) {
 }
 
 export async function POST(req: Request) {
+  // Validated here, at request time, rather than at module import time — see
+  // the comment on ensureEnv() in lib/env.ts for why that distinction matters.
+  try {
+    ensureEnv();
+  } catch {
+    return jsonError(
+      "Server misconfiguration: required environment variables are missing. Check the server logs for details.",
+      500
+    );
+  }
+
   // --- Parse and validate request body ---
   let body: any;
   try {

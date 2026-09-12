@@ -18,8 +18,22 @@ import {
 } from "@/config";
 
 /**
- * Server-side environment validation, imported for its side effect by
- * app/api/chat/route.ts.
+ * Server-side environment validation. Called lazily by ensureEnv() at the
+ * start of the /api/chat request handler — NOT at module import time.
+ *
+ * That distinction matters and is not cosmetic: this module was previously
+ * imported for its side effect (`import "@/lib/env"`), with validation
+ * running as soon as the module loaded via a top-level `export const env =
+ * validateEnv()`. Next.js's production build ("next build") evaluates route
+ * modules during its "Collecting page data" step to gather route metadata —
+ * so that eager validation ran DURING THE BUILD, not just at request time.
+ * Any env mismatch between the build environment and the intended runtime
+ * configuration (a key added to only one Vercel environment, a var renamed,
+ * a temporary gap while rotating a key) turned into a hard build failure,
+ * which takes down deployment of every route, not just /api/chat — the whole
+ * site 404s until the next successful build. Validating lazily means a
+ * misconfiguration is still caught loudly and immediately, but only when an
+ * actual request needs it, and it can never fail a build.
  *
  * WHAT CHANGED FROM THE BASE TEMPLATE, AND WHY:
  * the template required ANTHROPIC_API_KEY unconditionally and threw on import
@@ -157,4 +171,21 @@ function validateEnv(): Env {
   return env;
 }
 
-export const env = validateEnv();
+// Memoized per warm serverless instance: the first request pays for
+// validation, every request after reuses the cached result (or the cached
+// throw — a misconfigured instance keeps failing loudly rather than
+// re-validating into a possibly-different answer mid-instance-lifetime).
+let cachedEnv: Env | null = null;
+let cachedError: unknown = null;
+
+export function ensureEnv(): Env {
+  if (cachedEnv) return cachedEnv;
+  if (cachedError) throw cachedError;
+  try {
+    cachedEnv = validateEnv();
+    return cachedEnv;
+  } catch (err) {
+    cachedError = err;
+    throw err;
+  }
+}
