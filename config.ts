@@ -48,8 +48,14 @@ export const CLEAR_CHAT_TEXT = "New";
 // DEFAULT_VENDOR (and UTILITY_VENDOR below) to use one of them instead.
 export const DEFAULT_VENDOR: Vendor = "google";
 
-// gemini-3.5-flash: fast and free-tier eligible.
-export const DEFAULT_MODEL_ID = "gemini-3.5-flash";
+// gemini-2.5-flash (stable), NOT gemini-3.5-flash: the 3.5-flash preview's
+// free-tier quota is only 20 requests PER DAY (generativelanguage's
+// "GenerateRequestsPerDayPerProjectPerModel-FreeTier" quota) — it was
+// exhausted almost immediately in production, which silently broke every
+// chat message for the rest of the day (AI_RetryError: 429 RESOURCE_EXHAUSTED,
+// surfaced in Vercel's function logs). 2.5-flash's free tier is dramatically
+// higher, so it survives real usage instead of a couple dozen messages/day.
+export const DEFAULT_MODEL_ID = "gemini-2.5-flash";
 
 // Order tried when DEFAULT_VENDOR (or UTILITY_VENDOR) has no API key set.
 // This is what lets the same codebase fall back to whichever provider key is
@@ -77,7 +83,11 @@ export const UTILITY_VENDOR: Vendor = "google";
 // Must be a model id listed for UTILITY_VENDOR in lib/ai/providers.ts; if it
 // isn't, that vendor's own defaultUtilityModelId is used instead.
 // e.g. "claude-haiku-4-5" (anthropic), "gpt-5.4-mini" (openai).
-export const UTILITY_MODEL_ID = "gemini-3.5-flash-lite";
+// Same reasoning as DEFAULT_MODEL_ID above: the 3.5 preview line's free-tier
+// daily quota is only 20 requests and moderation runs on every single
+// message, so it was the first thing to run out. gemini-2.5-flash has a much
+// larger free-tier allowance.
+export const UTILITY_MODEL_ID = "gemini-2.5-flash";
 
 // --- Moderation denial messages ---
 export const MODERATION_DENIAL_MESSAGE_SEXUAL =

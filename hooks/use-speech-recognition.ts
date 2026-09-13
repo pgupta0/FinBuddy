@@ -53,9 +53,18 @@ export function useSpeechRecognition({
   onResult: (transcript: string, isFinal: boolean) => void;
   lang?: string;
 }) {
-  // Lazy initializer instead of an effect: this is a one-time synchronous
-  // feature check, not a subscription to an external system.
-  const [isSupported] = useState(() => !!getSpeechRecognitionConstructor());
+  // Starts false on both server and client so the very first client render
+  // matches the server-rendered HTML (SSR always sees `window === undefined`,
+  // so a lazy initializer here returns a different value client-side in any
+  // browser that supports speech recognition — a hydration mismatch that
+  // threw "Minified React error #418" on every single page load in
+  // production). Flipping it in an effect runs strictly after hydration, so
+  // the mismatch can't happen; the mic button just pops in a frame later in
+  // supporting browsers instead of possibly being present at hydration time.
+  const [isSupported, setIsSupported] = useState(false);
+  useEffect(() => {
+    setIsSupported(!!getSpeechRecognitionConstructor());
+  }, []);
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
 

@@ -210,9 +210,12 @@ const GOOGLE: VendorSpec = {
   // The one vendor here with a genuinely free tier (AI Studio key, no card).
   // Free-tier quotas are per-minute AND per-day and are easy to exhaust, which
   // is why PROVIDER_FALLBACK_ORDER in config.ts matters when Gemini is primary.
+  // Defaults point at the STABLE 2.5 line, not the 3.5 preview line — 3.5's
+  // free tier caps out at just 20 requests/day per model project-wide and was
+  // exhausted almost instantly in production (see config.ts DEFAULT_MODEL_ID).
   freeTier: true,
-  defaultModelId: "gemini-3.5-flash",
-  defaultUtilityModelId: "gemini-3.5-flash-lite",
+  defaultModelId: "gemini-2.5-flash",
+  defaultUtilityModelId: "gemini-2.5-flash",
   models: [
     { id: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash Lite", mode: "both", tier: "economy" },
     { id: "gemini-3.5-flash", label: "Gemini 3.5 Flash", mode: "both", tier: "economy" },
