@@ -96,6 +96,18 @@ export default function Chat() {
     }
   }, [isClient, activeConvId]);
 
+  // Stable reference (functional setState needs no deps) — passed straight
+  // through MessageWall to every AssistantMessage. An inline arrow function
+  // here would get a new identity every render, which defeats that
+  // component's React.memo and forces every past message to redo its
+  // citation-rewrite work on every streamed token.
+  const handleDurationChange = useCallback((key: string, duration: number) => {
+    setDurations((prev) => ({
+      ...prev,
+      [key]: duration,
+    }));
+  }, []);
+
   const { messages, sendMessage, status, stop, setMessages, addToolOutput, regenerate } = useChat({
     // Once the interactive risk-quiz widget (a client-side tool with no
     // execute — see app/api/chat/tools/present-risk-quiz.ts) resolves via
@@ -526,12 +538,7 @@ export default function Chat() {
                   status={status}
                   durations={durations}
                   conversationId={activeConvId ?? undefined}
-                  onDurationChange={(k, d) =>
-                    setDurations((prev) => ({
-                      ...prev,
-                      [k]: d,
-                    }))
-                  }
+                  onDurationChange={handleDurationChange}
                   addToolOutput={addToolOutput}
                   onRegenerate={(messageId) => regenerate({ messageId })}
                   onEditMessage={editUserMessage}

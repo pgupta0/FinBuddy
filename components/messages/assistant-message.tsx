@@ -11,7 +11,7 @@ import { AssemblingIndicator } from "../ai-elements/assembling-indicator";
 import { ProcessingIndicator } from "../ai-elements/processing-indicator";
 import { ThumbsUp, ThumbsDown, Copy, Check, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
+import { memo, useState } from "react";
 import { saveFeedback, loadFeedback } from "@/lib/storage";
 import { RiskQuizWidget, type AddRiskQuizOutput } from "./risk-quiz-widget";
 import { RiskProfileResultCard } from "./risk-profile-result-card";
@@ -67,7 +67,17 @@ function FeedbackButtons({ messageId, conversationId }: { messageId: string; con
   );
 }
 
-export function AssistantMessage({
+// Memoized: during streaming, the `messages` array from useChat gets a new
+// reference on every chunk, but earlier (non-streaming) messages keep their
+// same object identity. Without memo, every AssistantMessage in a
+// conversation re-runs its full render — including the citation-rewrite pass
+// over every text part — on every single streamed token of the CURRENT
+// message, which is pure waste for turns that already finished. Memoizing
+// lets React skip all of that for any message whose props haven't actually
+// changed. (Relies on callers passing stable callback references — see the
+// useCallback around onDurationChange in app/page.tsx; an inline arrow
+// function there would defeat this by changing identity every render.)
+export const AssistantMessage = memo(function AssistantMessage({
   message,
   status,
   isLastMessage,
@@ -308,4 +318,4 @@ export function AssistantMessage({
       )}
     </div>
   );
-}
+});

@@ -153,18 +153,22 @@ export const ReasoningTrigger = memo(
     return (
       <CollapsibleTrigger
         className={cn(
-          "flex w-full items-center gap-2 text-muted-foreground text-sm transition-colors hover:text-foreground",
+          // Compact pill (auto width), not a full-width row — the same
+          // "collapsed by default, tap to expand" chip treatment as the
+          // Sources box, echoing Gemini's "Show thinking" control instead of
+          // a row of text that just happens to be clickable.
+          "inline-flex w-fit items-center gap-1.5 rounded-full border border-border/60 bg-muted/30 px-3 py-1.5 text-muted-foreground text-xs font-medium transition-colors hover:bg-muted/50 hover:text-foreground",
           className
         )}
         {...props}
       >
         {children ?? (
           <>
-            {isStreaming && <BrainIcon className="size-4" />}
+            {isStreaming && <BrainIcon className="size-3.5" />}
             {getThinkingMessage(isStreaming, category, duration)}
             <ChevronDownIcon
               className={cn(
-                "size-4 transition-transform",
+                "size-3.5 transition-transform",
                 isOpen ? "rotate-180" : "rotate-0"
               )}
             />
