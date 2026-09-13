@@ -556,7 +556,13 @@ export default function Chat() {
           </div>
         </div>
 
-        <div className="fixed bottom-0 left-0 right-0 z-50 overflow-visible bg-linear-to-t from-background via-background/60 to-transparent pt-6 pb-3">
+        {/* Solid, blurred composer bar — the previous from/via/to gradient
+            left the textarea sitting in a partly-transparent zone, so
+            scrolled message text visibly showed through around it. The
+            short fade above the bar (.message-fade-overlay) still handles
+            the transition from scrolled content into the bar; the bar
+            itself now stays opaque throughout, like Claude/ChatGPT/Grok. */}
+        <div className="fixed bottom-0 left-0 right-0 z-50 overflow-visible bg-background/95 backdrop-blur-md border-t border-border/60 pt-4 pb-3">
           <div className="relative mx-auto max-w-3xl px-3 sm:px-5">
             <div className="message-fade-overlay" />
 
