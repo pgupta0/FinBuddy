@@ -8,7 +8,6 @@ import {
 } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { BrainIcon, ChevronDownIcon } from "lucide-react";
-import Image from "next/image";
 import type { ComponentProps } from "react";
 import { createContext, memo, useContext, useEffect, useRef, useState } from "react";
 import { Response } from "./response";
@@ -161,17 +160,7 @@ export const ReasoningTrigger = memo(
       >
         {children ?? (
           <>
-            {isStreaming ? (
-              <BrainIcon className="size-4" />
-            ) : (
-              <Image
-                src="/thinking.png"
-                alt=""
-                width={16}
-                height={16}
-                className=""
-              />
-            )}
+            {isStreaming && <BrainIcon className="size-4" />}
             {getThinkingMessage(isStreaming, category, duration)}
             <ChevronDownIcon
               className={cn(
