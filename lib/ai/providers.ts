@@ -210,18 +210,29 @@ const GOOGLE: VendorSpec = {
   // The one vendor here with a genuinely free tier (AI Studio key, no card).
   // Free-tier quotas are per-minute AND per-day and are easy to exhaust, which
   // is why PROVIDER_FALLBACK_ORDER in config.ts matters when Gemini is primary.
-  // Defaults point at the STABLE 2.5 line, not the 3.5 preview line — 3.5's
-  // free tier caps out at just 20 requests/day per model project-wide and was
-  // exhausted almost instantly in production (see config.ts DEFAULT_MODEL_ID).
   freeTier: true,
-  defaultModelId: "gemini-2.5-flash",
-  defaultUtilityModelId: "gemini-2.5-flash",
+  // THE 2.5 FAMILY IS GONE — do not put it back. Calling gemini-2.5-flash
+  // returns a hard 404 from the API: "This model models/gemini-2.5-flash is no
+  // longer available to new users. Please update your code to use
+  // models/gemini-3.6-flash". Because the moderation classifier runs on the
+  // utility model, that 404 took down EVERY chat request with a 503
+  // ("Content moderation is temporarily unavailable") before the chat model was
+  // ever reached. gemini-2.5-pro is the same generation and the same trap.
+  //
+  // Verified against ai.google.dev/gemini-api/docs/models on 14 Sep 2026.
+  // Google's model ids churn fast — re-check this list before any demo rather
+  // than trusting that a name which worked last week still resolves.
+  defaultModelId: "gemini-3.6-flash",
+  defaultUtilityModelId: "gemini-3.6-flash",
   models: [
     { id: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash Lite", mode: "both", tier: "economy" },
+    // 3.5-flash works, but its FREE tier allows only 20 requests/day per
+    // project — it was exhausted in minutes in production. Fine on a paid key,
+    // a trap on a free one.
     { id: "gemini-3.5-flash", label: "Gemini 3.5 Flash", mode: "both", tier: "economy" },
+    { id: "gemini-3.6-flash", label: "Gemini 3.6 Flash", mode: "both", tier: "economy" },
+    { id: "gemini-3.7-flash", label: "Gemini 3.7 Flash", mode: "both", tier: "standard" },
     { id: "gemini-3.8-flash", label: "Gemini 3.8 Flash", mode: "both", tier: "standard" },
-    { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash (stable)", mode: "both", tier: "economy" },
-    { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro", mode: "both", tier: "premium" },
   ],
   create: (modelId) => google(modelId),
   thinkingOptions: geminiThinking,
