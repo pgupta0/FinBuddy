@@ -40,13 +40,61 @@ export const CLEAR_CHAT_TEXT = "New";
 
 // --- Provider defaults ---
 // Four vendors are supported — anthropic, openai, google (Gemini), fireworks —
-// each defined once in lib/ai/providers.ts. Switching vendor is two lines here
-// plus that vendor's API key; no other file needs editing.
-// Running on Gemini (google) by default — it's the free-tier key this
-// deployment actually has configured. Anthropic, OpenAI and Fireworks stay
-// fully wired up as switchable options; add the matching API key and change
-// DEFAULT_VENDOR (and UTILITY_VENDOR below) to use one of them instead.
-export const DEFAULT_VENDOR: Vendor = "google";
+// each defined once in lib/ai/providers.ts.
+//
+// EVERY VALUE BELOW CAN BE OVERRIDDEN BY AN ENVIRONMENT VARIABLE, so switching
+// model or vendor on a deployed app is a change in the Vercel dashboard plus a
+// redeploy — no code edit, no commit, no push. That matters: the values here
+// are only the *fallbacks* used when the matching env var is absent or invalid.
+//
+//   DEFAULT_VENDOR=anthropic
+//   DEFAULT_MODEL_ID=claude-haiku-4-5
+//   UTILITY_VENDOR=google
+//   UTILITY_MODEL_ID=gemini-2.5-flash
+//
+// An unrecognised vendor name or an empty string is ignored in favour of the
+// fallback, so a typo in the dashboard degrades to "keeps working" rather than
+// "site is down".
+
+// Runtime list of valid vendor ids, duplicated from lib/ai/providers.ts on
+// purpose: `Vendor` above is a TYPE-only import so this file stays safe to
+// import from client components. Importing ALL_VENDORS for real would pull the
+// provider SDKs into the browser bundle. Keep this in sync with PROVIDERS.
+const VENDOR_IDS = ["anthropic", "openai", "google", "fireworks"] as const;
+
+// Guarded because this module is also imported by client components. Next.js
+// only inlines NEXT_PUBLIC_* vars into the browser bundle, so every read below
+// is simply `undefined` there and the fallback applies — which is correct, as
+// nothing client-side consumes these. The `typeof process` check just makes
+// that impossible to turn into a "process is not defined" runtime crash.
+function envRaw(name: string): string | undefined {
+  if (typeof process === "undefined" || !process.env) return undefined;
+  const value = process.env[name];
+  return typeof value === "string" ? value.trim() : undefined;
+}
+
+function envVendor(name: string, fallback: Vendor): Vendor {
+  const raw = envRaw(name)?.toLowerCase();
+  return raw && (VENDOR_IDS as readonly string[]).includes(raw)
+    ? (raw as Vendor)
+    : fallback;
+}
+
+function envText(name: string, fallback: string): string {
+  return envRaw(name) || fallback;
+}
+
+function envFlag(name: string, fallback: boolean): boolean {
+  const raw = envRaw(name)?.toLowerCase();
+  if (raw === "true" || raw === "1") return true;
+  if (raw === "false" || raw === "0") return false;
+  return fallback;
+}
+
+// Falls back to Gemini (google) — the free-tier key this deployment has had
+// configured. Anthropic, OpenAI and Fireworks are fully wired up: add the
+// matching API key and set DEFAULT_VENDOR in the environment.
+export const DEFAULT_VENDOR: Vendor = envVendor("DEFAULT_VENDOR", "google");
 
 // gemini-2.5-flash (stable), NOT gemini-3.5-flash: the 3.5-flash preview's
 // free-tier quota is only 20 requests PER DAY (generativelanguage's
@@ -55,7 +103,18 @@ export const DEFAULT_VENDOR: Vendor = "google";
 // chat message for the rest of the day (AI_RetryError: 429 RESOURCE_EXHAUSTED,
 // surfaced in Vercel's function logs). 2.5-flash's free tier is dramatically
 // higher, so it survives real usage instead of a couple dozen messages/day.
-export const DEFAULT_MODEL_ID = "gemini-2.5-flash";
+export const DEFAULT_MODEL_ID = envText("DEFAULT_MODEL_ID", "gemini-2.5-flash");
+
+// --- In-app model picker ---
+// When on, /api/models advertises every model whose vendor key is actually
+// set, and the header dropdown lets a visitor pick one for their own session.
+// The picker is a CONVENIENCE, not a security boundary: the chat route
+// re-validates whatever the client asks for against the same list, so the
+// worst a crafted request can do is choose a model this deployment already
+// offers. Set ENABLE_MODEL_PICKER=false to hide it and pin everyone to
+// DEFAULT_VENDOR/DEFAULT_MODEL_ID — worth doing if a paid key is configured
+// and the site is public, since otherwise any visitor can spend it.
+export const ENABLE_MODEL_PICKER = envFlag("ENABLE_MODEL_PICKER", true);
 
 // Order tried when DEFAULT_VENDOR (or UTILITY_VENDOR) has no API key set.
 // This is what lets the same codebase fall back to whichever provider key is
@@ -79,7 +138,11 @@ export const DEFAULT_THINKING_LEVEL = "medium" as const; // "off" | "low" | "med
 // conversation compaction summaries. Independent of the chat model above, so you
 // can run chat and utilities on different vendors — or switch everything to one
 // vendor. The API key for the chosen vendor must be set.
-export const UTILITY_VENDOR: Vendor = "google";
+// Override with UTILITY_VENDOR / UTILITY_MODEL_ID in the environment.
+// Deliberately NOT changed by the in-app model picker: the picker chooses the
+// model that answers the user, while moderation and compaction should stay on
+// something cheap and predictable no matter what a visitor selects.
+export const UTILITY_VENDOR: Vendor = envVendor("UTILITY_VENDOR", "google");
 // Must be a model id listed for UTILITY_VENDOR in lib/ai/providers.ts; if it
 // isn't, that vendor's own defaultUtilityModelId is used instead.
 // e.g. "claude-haiku-4-5" (anthropic), "gpt-5.4-mini" (openai).
@@ -87,7 +150,7 @@ export const UTILITY_VENDOR: Vendor = "google";
 // daily quota is only 20 requests and moderation runs on every single
 // message, so it was the first thing to run out. gemini-2.5-flash has a much
 // larger free-tier allowance.
-export const UTILITY_MODEL_ID = "gemini-2.5-flash";
+export const UTILITY_MODEL_ID = envText("UTILITY_MODEL_ID", "gemini-2.5-flash");
 
 // --- Moderation denial messages ---
 export const MODERATION_DENIAL_MESSAGE_SEXUAL =

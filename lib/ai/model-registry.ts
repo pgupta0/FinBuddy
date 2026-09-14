@@ -108,6 +108,56 @@ function modelIdFor(vendor: Vendor, requested: string): string {
   return providerSpec(vendor).defaultModelId;
 }
 
+// --- Selectable models (for the in-app picker) ------------------------------
+
+export type SelectableModel = {
+  vendor: Vendor;
+  vendorLabel: string;
+  modelId: string;
+  label: string;
+  tier: Tier;
+  /** True for the vendor's own default — the picker marks it as recommended. */
+  isVendorDefault: boolean;
+};
+
+/**
+ * Every model this deployment can ACTUALLY serve right now: the catalog from
+ * lib/ai/providers.ts, filtered to vendors whose API key is present.
+ *
+ * Filtering on the key (not just listing the catalog) is the point. A picker
+ * that offers "Claude Sonnet 5" on a deployment with no ANTHROPIC_API_KEY
+ * produces a confident selection followed by a failed request and an empty
+ * answer — the exact silent-failure shape this app has already been bitten by.
+ * If it is listed, it works.
+ */
+export function selectableModels(): SelectableModel[] {
+  return configuredVendors().flatMap((vendor) => {
+    const spec = providerSpec(vendor);
+    return spec.models.map((m) => ({
+      vendor,
+      vendorLabel: spec.label,
+      modelId: m.id,
+      label: m.label,
+      tier: m.tier,
+      isVendorDefault: m.id === spec.defaultModelId,
+    }));
+  });
+}
+
+/**
+ * Whether a (vendor, model) pair may be served: the model exists in that
+ * vendor's catalog AND that vendor's key is set.
+ *
+ * This is the guard the chat route applies to anything a client asks for. A
+ * client-supplied string must never reach createModel() unchecked — that would
+ * let a crafted request name an arbitrary model id on the provider's API.
+ */
+export function isSelectable(vendor: string, modelId: string): boolean {
+  if (!(ALL_VENDORS as string[]).includes(vendor)) return false;
+  const v = vendor as Vendor;
+  return isVendorConfigured(v) && vendorHasModel(v, modelId);
+}
+
 // --- Chat model -------------------------------------------------------------
 
 export function getModel(vendor: Vendor, modelId: string) {

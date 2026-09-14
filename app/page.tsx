@@ -32,6 +32,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { ConversationSidebar } from "@/components/conversation-sidebar";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { ModelPicker, type ModelChoice } from "@/components/model-picker";
 import { useSpeechRecognition } from "@/hooks/use-speech-recognition";
 import {
   ATTACHMENT_ACCEPT,
@@ -83,6 +84,15 @@ export default function Chat() {
   const summaryRef = useRef<{ summary: string; summarizedUpTo: number; signature: string } | null>(null);
   const activeConvIdRef = useRef<string | null>(null);
 
+  // Model chosen in the header picker. Held in a ref, not state: the transport's
+  // fetch wrapper below is created once, so it must read the CURRENT value at
+  // request time rather than close over whatever was selected on first render.
+  // Null simply means "no preference" — the server uses its configured default.
+  const selectedModelRef = useRef<ModelChoice | null>(null);
+  const handleModelChange = useCallback((choice: ModelChoice | null) => {
+    selectedModelRef.current = choice;
+  }, []);
+
   // Keep ref in sync with state
   useEffect(() => {
     activeConvIdRef.current = activeConvId;
@@ -132,6 +142,15 @@ export default function Chat() {
           if (Object.keys(fb).length > 0) {
             headers.set("X-Feedback", btoa(JSON.stringify(fb)));
           }
+        }
+        // Model chosen in the header picker. The server treats these as
+        // untrusted and re-validates them against the catalog and the keys it
+        // actually has (see routeRequest in lib/ai/routing.ts), so an unknown
+        // or unservable pair is ignored rather than trusted.
+        const chosen = selectedModelRef.current;
+        if (chosen) {
+          headers.set("X-Model-Vendor", chosen.vendor);
+          headers.set("X-Model-Id", chosen.modelId);
         }
         const response = await fetch(url, { ...options, headers });
 
@@ -472,6 +491,11 @@ export default function Chat() {
             </ChatHeaderBlock>
 
             <ChatHeaderBlock className="justify-end gap-2">
+              {/* Model picker. Renders nothing unless this deployment can serve
+                  more than one model (see /api/models), so a single-provider
+                  deployment looks exactly as it did before. */}
+              <ModelPicker onChange={handleModelChange} />
+
               {/* Context Memory dropdown (toggle via COMPACTION_SHOW_CONTEXT_MEMORY in config) */}
               {(() => {
                 if (!COMPACTION_SHOW_CONTEXT_MEMORY) return null;

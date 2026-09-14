@@ -13,6 +13,7 @@ import {
   providerSpec,
   wrapProviderOptions,
   resolveChatModel,
+  isSelectable,
   type Vendor,
   type Mode,
   type ThinkingLevel,
@@ -67,16 +68,41 @@ const REASONING_CUES =
 const MULTI_DOC_CUES =
   /\b(risk parity|core[- ]satellite|endowment[- ]style|family office|pms|asset allocation strategy)\b/i;
 
+/** What the client asked for, before any validation. Both fields untrusted. */
+export type RequestedModel = {
+  vendor?: string | null;
+  modelId?: string | null;
+};
+
 /**
- * SERVER-SIDE ROUTING ONLY.
- * End users cannot choose a vendor, model, or mode — all three come from
- * config.ts, resolved against the keys that are actually present.
- * DEFAULT_VENDOR stays "anthropic" (see config.ts).
+ * Picks vendor, model, mode and thinking level for one request.
+ *
+ * MODE AND THINKING LEVEL ARE SERVER-SIDE ONLY — a client cannot ask for
+ * extended reasoning and run up the bill.
+ *
+ * VENDOR AND MODEL are server-side by default, but a client MAY request one
+ * when the in-app picker is enabled (ENABLE_MODEL_PICKER in config.ts). That
+ * request is honoured only if it survives isSelectable(): the model must exist
+ * in the catalog in lib/ai/providers.ts AND its vendor's API key must be set.
+ * Anything else — an unknown vendor, a model id this deployment cannot serve,
+ * a crafted string aimed at the provider API — is silently dropped in favour
+ * of the configured default. The client's string is never passed through to
+ * createModel() unchecked.
  */
-export function routeRequest(messages: UIMessage[]): RouteResult {
+export function routeRequest(
+  messages: UIMessage[],
+  requested?: RequestedModel
+): RouteResult {
   // Resolve against configured keys so the logged/returned vendor is the one
   // that will really serve the request (matters when only a Gemini key is set).
-  const { vendor, modelId } = resolveChatModel(DEFAULT_VENDOR, DEFAULT_MODEL_ID);
+  const fallback = resolveChatModel(DEFAULT_VENDOR, DEFAULT_MODEL_ID);
+
+  const wanted =
+    requested?.vendor && requested?.modelId && isSelectable(requested.vendor, requested.modelId)
+      ? { vendor: requested.vendor as Vendor, modelId: requested.modelId }
+      : null;
+
+  const { vendor, modelId } = wanted ?? fallback;
   let mode: Mode = DEFAULT_MODE;
   let thinkingLevel: ThinkingLevel = DEFAULT_THINKING_LEVEL;
 

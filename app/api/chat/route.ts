@@ -182,10 +182,20 @@ export async function POST(req: Request) {
   }
 
   // --- Route request ---
-  const { vendor, modelId, mode, thinkingLevel } = routeRequest(messages);
+  // The header picker sends its choice here. Both values are UNTRUSTED —
+  // routeRequest validates them against the catalog and the keys that are
+  // actually set, and falls back to the configured default if either is off.
+  // Sent as headers rather than in the body so this rides alongside the
+  // existing X-Compacted-* headers and needs no change to the message payload.
+  const requestedModel = {
+    vendor: req.headers.get("X-Model-Vendor"),
+    modelId: req.headers.get("X-Model-Id"),
+  };
+
+  const { vendor, modelId, mode, thinkingLevel } = routeRequest(messages, requestedModel);
   // Routing logged at debug level only
   if (process.env.NODE_ENV === "development") {
-    console.debug("AI ROUTING:", { vendor, modelId, mode, thinkingLevel });
+    console.debug("AI ROUTING:", { vendor, modelId, mode, thinkingLevel, requestedModel });
   }
 
   // --- Build model, tools, and provider options ---
