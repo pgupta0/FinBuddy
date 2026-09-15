@@ -7,6 +7,8 @@ import {
   DEFAULT_THINKING_LEVEL,
   STRONG_REASONING_LENGTH_THRESHOLD,
   CHAT_THINKING_LEVEL,
+  MAX_STEPS,
+  MAX_STEPS_ECONOMY,
 } from "@/config";
 import {
   thinkingBudget,
@@ -24,7 +26,24 @@ export type RouteResult = {
   modelId: string;
   mode: Mode;
   thinkingLevel: ThinkingLevel;
+  /** Tool-use step ceiling for this request — see stepBudgetFor below. */
+  maxSteps: number;
 };
+
+/**
+ * How many tool-use steps this request gets. Every step is its own model
+ * call, and on a free-tier vendor's economy model that call draws from the
+ * SAME per-day quota the moderation classifier also draws from (see
+ * config.ts's MAX_STEPS_ECONOMY comment) — so the cheaper the model, the
+ * tighter the budget needs to be to avoid running that quota out mid-day.
+ * Paid/standard/premium models keep the full MAX_STEPS budget.
+ */
+function stepBudgetFor(vendor: Vendor, modelId: string): number {
+  const spec = providerSpec(vendor);
+  const entry = spec.models.find((m) => m.id === modelId);
+  if (spec.freeTier && entry?.tier === "economy") return MAX_STEPS_ECONOMY;
+  return MAX_STEPS;
+}
 
 /**
  * Vendor-keyed provider options (e.g. `{ anthropic: {...} }`, `{ google: {...} }`).
@@ -118,7 +137,7 @@ export function routeRequest(
     thinkingLevel = "high";
   }
 
-  return { vendor, modelId, mode, thinkingLevel };
+  return { vendor, modelId, mode, thinkingLevel, maxSteps: stepBudgetFor(vendor, modelId) };
 }
 
 /**

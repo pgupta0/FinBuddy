@@ -96,14 +96,20 @@ function envFlag(name: string, fallback: boolean): boolean {
 // matching API key and set DEFAULT_VENDOR in the environment.
 export const DEFAULT_VENDOR: Vendor = envVendor("DEFAULT_VENDOR", "google");
 
-// gemini-2.5-flash (stable), NOT gemini-3.5-flash: the 3.5-flash preview's
-// free-tier quota is only 20 requests PER DAY (generativelanguage's
-// "GenerateRequestsPerDayPerProjectPerModel-FreeTier" quota) — it was
-// exhausted almost immediately in production, which silently broke every
-// chat message for the rest of the day (AI_RetryError: 429 RESOURCE_EXHAUSTED,
-// surfaced in Vercel's function logs). 2.5-flash's free tier is dramatically
-// higher, so it survives real usage instead of a couple dozen messages/day.
-export const DEFAULT_MODEL_ID = envText("DEFAULT_MODEL_ID", "gemini-2.5-flash");
+// gemini-3.6-flash, NOT gemini-2.5-flash and NOT gemini-3.5-flash:
+//  - The 2.5 family is DEAD — the API now returns a hard 404 ("no longer
+//    available to new users, use gemini-3.6-flash"). See lib/ai/providers.ts.
+//  - 3.5-flash's free tier is only 20 requests PER DAY (generativelanguage's
+//    "GenerateRequestsPerDayPerProjectPerModel-FreeTier" quota) — exhausted
+//    almost immediately in production (AI_RetryError: 429 RESOURCE_EXHAUSTED).
+// gemini-3.6-flash is the current safe default on a free key. This value is
+// also just a fallback either way: lib/ai/model-registry.ts's modelIdFor()
+// silently swaps in the vendor's own defaultModelId whenever this string
+// isn't in that vendor's catalog in lib/ai/providers.ts, so a stale id here
+// degrades to "the vendor's current default" rather than a broken deployment
+// — but keep it current anyway, since a stale value here is confusing to
+// anyone reading this file to find out what's actually running.
+export const DEFAULT_MODEL_ID = envText("DEFAULT_MODEL_ID", "gemini-3.6-flash");
 
 // --- In-app model picker ---
 // When on, /api/models advertises every model whose vendor key is actually
@@ -146,11 +152,12 @@ export const UTILITY_VENDOR: Vendor = envVendor("UTILITY_VENDOR", "google");
 // Must be a model id listed for UTILITY_VENDOR in lib/ai/providers.ts; if it
 // isn't, that vendor's own defaultUtilityModelId is used instead.
 // e.g. "claude-haiku-4-5" (anthropic), "gpt-5.4-mini" (openai).
-// Same reasoning as DEFAULT_MODEL_ID above: the 3.5 preview line's free-tier
-// daily quota is only 20 requests and moderation runs on every single
-// message, so it was the first thing to run out. gemini-2.5-flash has a much
-// larger free-tier allowance.
-export const UTILITY_MODEL_ID = envText("UTILITY_MODEL_ID", "gemini-2.5-flash");
+// Same reasoning as DEFAULT_MODEL_ID above, and higher stakes: moderation
+// runs on THIS model for every single message, so if it's the dead 2.5 family
+// or the 20/day 3.5-flash preview, it's the first thing to run out — and per
+// MODERATION_FAIL_POLICY below, that takes down every chat message with it,
+// not just this one call. gemini-3.6-flash is the current safe default.
+export const UTILITY_MODEL_ID = envText("UTILITY_MODEL_ID", "gemini-3.6-flash");
 
 // --- Moderation denial messages ---
 export const MODERATION_DENIAL_MESSAGE_SEXUAL =
@@ -260,6 +267,17 @@ export const EXA_SYSTEM_PROMPT = `Prefer authoritative sources: SEBI, AMFI, RBI,
 // budgets below, the risk-quiz tool chain (presentRiskQuiz -> scoreRiskProfile
 // -> fundRecommendations = 3 steps), and the final compose step.
 export const MAX_STEPS = 8; // max tool-use steps per request
+// Lower cap used for free-tier "economy" models (see lib/ai/routing.ts,
+// stepBudgetFor). Each step in the loop (KB search, web search, etc.) is its
+// own model call, ON TOP OF the moderation call that already runs once per
+// turn — a "tough" question that walks the full MAX_STEPS budget can cost
+// 6-10+ calls against the SAME per-day free-tier quota moderation shares.
+// That is what emptied a free Gemini key's quota in well under 10 user
+// messages during the 2026-09-15 QA pass (see the project doc of that name)
+// and triggered the moderation-cascade 429/503 for the rest of the day. This
+// does not fix the underlying quota size, but it roughly halves how fast an
+// economy-tier deployment burns through it.
+export const MAX_STEPS_ECONOMY = 4;
 // Per-response soft budgets (enforced via prompt guidance in lib/ai/tools.ts).
 export const MAX_KB_SEARCHES = 2; // max vectorDatabaseSearch calls per response
 export const MAX_WEB_SEARCHES = 3; // max webSearch calls per response

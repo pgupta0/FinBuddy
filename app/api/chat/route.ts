@@ -12,7 +12,6 @@ import { SYSTEM_PROMPT } from "@/prompts";
 import { isContentFlagged } from "@/lib/moderation";
 import {
   MODERATION_FAIL_POLICY,
-  MAX_STEPS,
   MAX_MESSAGES,
   MAX_MESSAGE_TEXT_LENGTH,
   MAX_OUTPUT_TOKENS,
@@ -192,10 +191,10 @@ export async function POST(req: Request) {
     modelId: req.headers.get("X-Model-Id"),
   };
 
-  const { vendor, modelId, mode, thinkingLevel } = routeRequest(messages, requestedModel);
+  const { vendor, modelId, mode, thinkingLevel, maxSteps } = routeRequest(messages, requestedModel);
   // Routing logged at debug level only
   if (process.env.NODE_ENV === "development") {
-    console.debug("AI ROUTING:", { vendor, modelId, mode, thinkingLevel, requestedModel });
+    console.debug("AI ROUTING:", { vendor, modelId, mode, thinkingLevel, maxSteps, requestedModel });
   }
 
   // --- Build model, tools, and provider options ---
@@ -259,7 +258,21 @@ export async function POST(req: Request) {
     );
   }
   if (moderationResult.skipped && MODERATION_FAIL_POLICY === "closed") {
-    console.warn("Moderation unavailable; blocking per MODERATION_FAIL_POLICY=closed");
+    console.warn(
+      `Moderation unavailable (${moderationResult.skipReason ?? "error"}); blocking per MODERATION_FAIL_POLICY=closed`
+    );
+    // A rate limit is not "the safety check is broken" — it's "this model's
+    // free-tier quota ran out," which is common on Gemini and has an obvious
+    // fix (wait, or switch models). Telling the user that instead of the
+    // generic message is the difference between "the bot is dead" and "I know
+    // exactly what to do." 429 is also the more accurate status code here than
+    // 503 — the server is fine, the request is what's being throttled.
+    if (moderationResult.skipReason === "rate_limited") {
+      return jsonError(
+        "The current model has hit its free-tier rate limit for now. Please wait a minute and try again, or pick a different model from the dropdown in the header.",
+        429
+      );
+    }
     return jsonError("Content moderation is temporarily unavailable. Please try again shortly.", 503);
   }
 
@@ -351,7 +364,7 @@ export async function POST(req: Request) {
           model,
           messages: [...systemMessages, ...modelMessages],
           tools,
-          stopWhen: stepCountIs(MAX_STEPS),
+          stopWhen: stepCountIs(maxSteps),
           maxOutputTokens: MAX_OUTPUT_TOKENS,
           providerOptions: effectiveProviderOptions,
           ...(forceKbSearchFirstStep

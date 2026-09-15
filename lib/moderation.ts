@@ -35,6 +35,33 @@ export interface ModerationResult {
     skipped?: boolean;
     denialMessage?: string;
     category?: string;
+    /**
+     * Why moderation was skipped, when it was. "rate_limited" gets a distinct,
+     * actionable message in app/api/chat/route.ts (the free-tier Gemini quota
+     * is the far more common cause of a moderation failure than the classifier
+     * actually being broken — see the 2026-09-15 QA pass notes). "error" covers
+     * everything else (bad response shape, network failure, provider outage).
+     */
+    skipReason?: "rate_limited" | "error";
+}
+
+// Matches the error shapes providers actually throw for "you've used up your
+// quota/rate limit" — Gemini's 429 RESOURCE_EXHAUSTED, generic HTTP 429s, and
+// OpenAI/Anthropic's "rate_limit" error codes. Deliberately loose (message
+// text varies by SDK version) rather than trying to match one provider's exact
+// wording.
+const RATE_LIMIT_PATTERN = /\b429\b|rate.?limit|resource_exhausted|quota/i;
+
+function isRateLimitError(error: unknown): boolean {
+    const message =
+        error instanceof Error
+            ? `${error.message} ${(error as { cause?: unknown }).cause ?? ""}`
+            : String(error);
+    return RATE_LIMIT_PATTERN.test(message);
+}
+
+function sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 const CATEGORY_DENIAL_MESSAGES: Record<string, string> = {
@@ -157,14 +184,28 @@ export async function isContentFlagged(text: string): Promise<ModerationResult> 
         return { flagged: false };
     }
 
+    const run = () =>
+        MODERATION_PROVIDER === 'llm' ? moderateWithLLM(text) : moderateWithOpenAI(text);
+
     try {
-        if (MODERATION_PROVIDER === 'llm') {
-            return await moderateWithLLM(text);
+        return await run();
+    } catch (firstError) {
+        // One short retry — this only helps a transient per-minute rate limit
+        // or a momentary network blip. It does nothing for a per-day quota
+        // that's actually exhausted (the retry fails the same way, ~600ms
+        // later), which is fine: that case is handled below by returning a
+        // distinct skipReason instead of pretending a retry could fix it.
+        if (isRateLimitError(firstError)) {
+            await sleep(600);
+            try {
+                return await run();
+            } catch (secondError) {
+                console.error(`Moderation rate-limited (provider: ${MODERATION_PROVIDER}):`, secondError);
+                return { flagged: false, skipped: true, skipReason: "rate_limited" };
+            }
         }
-        return await moderateWithOpenAI(text);
-    } catch (error) {
-        console.error(`Moderation error (provider: ${MODERATION_PROVIDER}):`, error);
+        console.error(`Moderation error (provider: ${MODERATION_PROVIDER}):`, firstError);
         // skipped=true lets MODERATION_FAIL_POLICY decide whether to block
-        return { flagged: false, skipped: true };
+        return { flagged: false, skipped: true, skipReason: "error" };
     }
 }

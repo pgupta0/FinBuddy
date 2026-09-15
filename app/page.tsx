@@ -152,7 +152,27 @@ export default function Chat() {
           headers.set("X-Model-Vendor", chosen.vendor);
           headers.set("X-Model-Id", chosen.modelId);
         }
-        const response = await fetch(url, { ...options, headers });
+        let response: Response;
+        try {
+          response = await fetch(url, { ...options, headers });
+        } catch (err) {
+          // A request that dies mid-stream (the connection drops, a proxy
+          // times out, the tab's network throttles it) surfaces here as a
+          // rejected fetch — e.g. Chrome's net::ERR_ABORTED, seen in the
+          // 2026-09-15 QA pass on longer/tool-heavy answers. Left alone, that
+          // rejection propagates as whatever cryptic text the browser used
+          // ("Failed to fetch", "The operation was aborted") and — worse — the
+          // user is left staring at a composer that's already back to its
+          // normal "ready to send" state, with nothing in the transcript
+          // marking that their message never got an answer. Rethrowing with a
+          // clear, specific message at least makes the onError toast below
+          // tell them what actually happened and that retrying is the right
+          // move, instead of a generic/confusing browser error string.
+          const cause = err instanceof Error ? err.message : String(err);
+          throw new Error(
+            `Lost connection before FinBuddy finished replying (${cause}). Please try again — if it keeps happening, the model may be rate-limited; try a different one from the picker.`
+          );
+        }
 
         // Read updated summary from response headers
         const newSummaryB64 = response.headers.get("X-Compacted-Summary");
@@ -176,7 +196,16 @@ export default function Chat() {
     }),
     experimental_throttle: 50,
     onError(error) {
-      toast.error(error.message || "Something went wrong. Please try again.");
+      // Longer duration than sonner's default (~4s): an error toast that
+      // vanishes before the user looks up is functionally the same as no
+      // error at all — see the "silent failure" finding in the
+      // 2026-09-15 QA pass (claude/finbuddy-gemini-qa-test-2026-09-15.md in
+      // the project). This doesn't add a persistent in-transcript failure
+      // marker (a bigger UI change), but it at least gives a real chance of
+      // being seen.
+      toast.error(error.message || "Something went wrong. Please try again.", {
+        duration: 10000,
+      });
     },
   });
 
