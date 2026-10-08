@@ -17,6 +17,7 @@ import { RiskQuizWidget, type AddRiskQuizOutput } from "./risk-quiz-widget";
 import { RiskProfileResultCard } from "./risk-profile-result-card";
 import type { RiskProfileToolOutput } from "@/app/api/chat/tools/score-risk-profile";
 import { FundRecommendationsCard } from "./fund-recommendations-card";
+import { ComplianceView } from "./compliance-view";
 import type { FundRecommendationsOutput } from "@/app/api/chat/tools/fund-recommendations";
 import { stripComplianceBlocks } from "@/lib/governance/compliance-block";
 import { STANDARD_DISCLAIMER, WITHHELD_REDIRECT } from "@/lib/governance/constants";
@@ -306,6 +307,7 @@ export const AssistantMessage = memo(function AssistantMessage({
         })}
       </div>
       {sources.length > 0 && <Sources sources={sources} />}
+      {compliance && !isStreaming && <ComplianceView data={compliance} />}
       {showActions && (
         <div className="flex items-center gap-1 mt-1">
           <Button

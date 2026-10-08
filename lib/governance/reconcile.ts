@@ -68,11 +68,39 @@ export interface GovernanceRecord {
   sources_used: ComplianceBlock["sources_used"];
 }
 
-/** What the browser receives — the label and user-facing actions only. */
+/**
+ * Detail for the per-answer Compliance View. Contains labels, rule ids, gap
+ * descriptions and PII *types* only — never PII values, and never the
+ * withheld draft's text.
+ */
+export interface ComplianceViewDetails {
+  skill_version: string;
+  rules_version: string;
+  model_label: Label | null;
+  code_label: Label;
+  input_floor: Label;
+  query_type: string;
+  rubric_hits: string[];
+  rules_triggered: string[];
+  action_taken: string;
+  input_flags: string[];
+  pii_types: string[];
+  consent: string;
+  sources_used: GovernanceRecord["sources_used"];
+  gaps: GovernanceRecord["gaps"];
+  needs_human_review: boolean;
+  review_reasons: string[];
+  confidence: string;
+  rationale: string;
+  disclaimer_appended: boolean;
+}
+
+/** What the browser receives: the label and user-facing actions, plus Compliance View detail when enabled. */
 export interface ClientComplianceData {
   label: Label;
   withheld: boolean;
   appendDisclaimer: boolean;
+  details?: ComplianceViewDetails;
 }
 
 export function evaluateTurn(input: GovernanceTurnInput): GovernanceRecord {
@@ -165,6 +193,35 @@ export function evaluateTurn(input: GovernanceTurnInput): GovernanceRecord {
   };
 }
 
-export function toClientData(r: GovernanceRecord): ClientComplianceData {
-  return { label: r.label, withheld: r.withheld, appendDisclaimer: r.disclaimer_appended };
+export function toClientData(r: GovernanceRecord, includeDetails = false): ClientComplianceData {
+  const base: ClientComplianceData = {
+    label: r.label,
+    withheld: r.withheld,
+    appendDisclaimer: r.disclaimer_appended,
+  };
+  if (!includeDetails) return base;
+  return {
+    ...base,
+    details: {
+      skill_version: r.skill_version,
+      rules_version: r.rules_version,
+      model_label: r.model_label,
+      code_label: r.code_label,
+      input_floor: r.input_floor,
+      query_type: r.query_type,
+      rubric_hits: r.rubric_hits,
+      rules_triggered: r.rules_triggered,
+      action_taken: r.action_taken,
+      input_flags: r.input_flags,
+      pii_types: r.pii_types,
+      consent: r.consent,
+      sources_used: r.sources_used,
+      gaps: r.gaps,
+      needs_human_review: r.needs_human_review,
+      review_reasons: r.review_reasons,
+      confidence: r.confidence,
+      rationale: r.rationale,
+      disclaimer_appended: r.disclaimer_appended,
+    },
+  };
 }

@@ -11,7 +11,7 @@ import {
   parseComplianceBlock,
   stripComplianceBlocks,
 } from "@/lib/governance/compliance-block";
-import { evaluateTurn } from "@/lib/governance/reconcile";
+import { evaluateTurn, toClientData } from "@/lib/governance/reconcile";
 import { STANDARD_DISCLAIMER } from "@/lib/governance/constants";
 
 // ---------------------------------------------------------------------------
@@ -341,5 +341,32 @@ describe("reconciliation", () => {
         block({}),
     });
     expect(r.disclaimer_appended).toBe(true);
+  });
+});
+
+describe("Compliance View payload", () => {
+  const r = evaluateTurn({
+    adviceRequestCount: 0,
+    quizExceptionActive: false,
+    sourceCount: 0,
+    userText: "My PAN is ABCDE1234F",
+    answerText: "Please don't share identifiers like PAN or account numbers." + block({ label: "AMBER" }),
+  });
+
+  it("sends only label and actions when the view is off", () => {
+    expect(toClientData(r, false)).toEqual({
+      label: r.label,
+      withheld: r.withheld,
+      appendDisclaimer: r.disclaimer_appended,
+    });
+  });
+
+  it("sends detail without PII values or draft text when on", () => {
+    const d = toClientData(r, true);
+    expect(d.details?.pii_types).toContain("pan");
+    const json = JSON.stringify(d);
+    expect(json).not.toContain("ABCDE1234F");
+    expect(json).not.toContain("code_hits");
+    expect(json).not.toContain("answer_text");
   });
 });

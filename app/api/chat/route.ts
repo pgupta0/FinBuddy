@@ -22,6 +22,7 @@ import {
   ENABLE_VECTOR_SEARCH,
   PROMPT_CACHING_ENABLED,
   PROMPT_CACHE_TTL,
+  COMPLIANCE_VIEW_ENABLED,
 } from "@/config";
 import { mentionsKbTerm } from "@/lib/ai/kb-keywords";
 import { signSummary, verifySummary } from "@/lib/summary-signature";
@@ -567,7 +568,7 @@ export async function POST(req: Request) {
             writer.write({
               type: "data-compliance",
               id: "compliance",
-              data: toClientData(record),
+              data: toClientData(record, COMPLIANCE_VIEW_ENABLED),
             });
             if (record.withheld) {
               console.warn(

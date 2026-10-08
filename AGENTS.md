@@ -22,6 +22,7 @@ versioned; changing either needs Governance-admin sign-off and a changelog row
 | Audit log + review queue | `lib/governance/audit-log.ts` |
 | Per-turn note to the model | `lib/governance/turn-note.ts` |
 | Client display (strip block, withhold, append disclaimer) | `lib/governance/display.ts` |
+| Per-answer Compliance View (badge + detail; `COMPLIANCE_VIEW=off` hides it and stops sending detail) | `components/messages/compliance-view.tsx` |
 | Tests (skill Section 14 suite) | `lib/governance/__tests__/governance.test.ts` |
 
 Flow in `app/api/chat/route.ts`: input checks on the raw message → PII masked in

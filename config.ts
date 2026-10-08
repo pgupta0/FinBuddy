@@ -407,3 +407,13 @@ export const ENABLE_WEB_SEARCH =
 // and PINECONE_API_KEY is not needed. The bot answers from general knowledge (+ web search if enabled).
 export const ENABLE_VECTOR_SEARCH =
   process.env.ENABLE_VECTOR_SEARCH?.toLowerCase() !== "false";
+
+// --- Governance: Compliance View ---
+// Shows a GREEN / AMBER / RED badge under each answer that expands into the
+// governance detail for that turn (rubric hits, rules, gaps, sources, review
+// status). The governance skill (Section 13, access control) reserves this
+// panel for the Compliance reviewer, so set COMPLIANCE_VIEW=off for a public
+// launch: the server then stops sending the detail at all, and the badge is
+// not rendered. On by default for development and demos.
+export const COMPLIANCE_VIEW_ENABLED =
+  process.env.COMPLIANCE_VIEW?.toLowerCase() !== "off";
