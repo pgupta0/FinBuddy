@@ -225,11 +225,9 @@ const GOOGLE: VendorSpec = {
   defaultModelId: "gemini-3.6-flash",
   defaultUtilityModelId: "gemini-3.6-flash",
   models: [
-    { id: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash Lite", mode: "both", tier: "economy" },
-    // 3.5-flash works, but its FREE tier allows only 20 requests/day per
-    // project — it was exhausted in minutes in production. Fine on a paid key,
-    // a trap on a free one.
-    { id: "gemini-3.5-flash", label: "Gemini 3.5 Flash", mode: "both", tier: "economy" },
+    // The 3.5 family (3.5-flash, 3.5-flash-lite) was removed on 8 Oct 2026:
+    // 3.5-flash's free tier allowed only 20 requests/day and was exhausted in
+    // minutes in production. 3.6 Flash is the oldest model kept.
     { id: "gemini-3.6-flash", label: "Gemini 3.6 Flash", mode: "both", tier: "economy" },
     { id: "gemini-3.7-flash", label: "Gemini 3.7 Flash", mode: "both", tier: "standard" },
     { id: "gemini-3.8-flash", label: "Gemini 3.8 Flash", mode: "both", tier: "standard" },

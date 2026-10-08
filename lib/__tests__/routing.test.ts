@@ -181,7 +181,7 @@ describe("buildProviderOptions", () => {
       "google",
       "reasoning",
       "high",
-      "gemini-3.5-flash"
+      "gemini-3.6-flash"
     );
     expect((g3.google as any)?.thinkingConfig.thinkingLevel).toBe("high");
     expect((g3.google as any)?.thinkingConfig.thinkingBudget).toBeUndefined();
@@ -224,7 +224,7 @@ describe("providerOptionsForForcedTool", () => {
   });
 
   it("leaves google and openai options untouched", () => {
-    const g = buildProviderOptions("google", "chat", "low", "gemini-3.5-flash");
+    const g = buildProviderOptions("google", "chat", "low", "gemini-3.6-flash");
     expect(providerOptionsForForcedTool("google", g).google).toEqual(g.google);
 
     const o = buildProviderOptions("openai", "chat", "low", "gpt-5.6-luna");

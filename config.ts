@@ -50,7 +50,7 @@ export const CLEAR_CHAT_TEXT = "New";
 //   DEFAULT_VENDOR=anthropic
 //   DEFAULT_MODEL_ID=claude-haiku-4-5
 //   UTILITY_VENDOR=google
-//   UTILITY_MODEL_ID=gemini-2.5-flash
+//   UTILITY_MODEL_ID=gemini-3.6-flash
 //
 // An unrecognised vendor name or an empty string is ignored in favour of the
 // fallback, so a typo in the dashboard degrades to "keeps working" rather than

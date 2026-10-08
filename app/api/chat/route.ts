@@ -1,6 +1,7 @@
 import {
   streamText,
   UIMessage,
+  type TextUIPart,
   type ModelMessage,
   convertToModelMessages,
   stepCountIs,
@@ -41,6 +42,11 @@ import {
   claimSupported,
 } from "@/lib/citations";
 import { uiSourceSchema, type UISource } from "@/types/data";
+import { checkInput, countAdviceRequests, maskPII } from "@/lib/governance/checks";
+import { evaluateTurn, toClientData } from "@/lib/governance/reconcile";
+import { stripComplianceBlocks } from "@/lib/governance/compliance-block";
+import { buildAuditEntry, writeAuditEntry } from "@/lib/governance/audit-log";
+import { buildGovernanceTurnNote } from "@/lib/governance/turn-note";
 
 // Next.js requires segment config to be a static literal (not imported).
 // Keep in sync with VERCEL_MAX_DURATION in config.ts and Vercel Pro plan settings.
@@ -79,6 +85,37 @@ function validateLatestUserAttachments(messages: UIMessage[]): string | null {
 }
 
 
+/** Text of every user message in the conversation, oldest first. */
+function allUserTexts(messages: UIMessage[]): string[] {
+  return messages
+    .filter((m) => m.role === "user")
+    .map((m) =>
+      (m.parts ?? [])
+        .filter((p): p is TextUIPart => p.type === "text")
+        .map((p) => p.text)
+        .join("\n")
+    );
+}
+
+/**
+ * Governance skill Section 6 I-2 / Section 9.2 (data minimisation): personal
+ * identifiers in user text are replaced with typed placeholders before the
+ * conversation reaches the model, moderation or compaction. The browser still
+ * holds what the user typed; nothing downstream of this point does.
+ */
+function maskUserMessages(messages: UIMessage[]): UIMessage[] {
+  return messages.map((m) =>
+    m.role !== "user"
+      ? m
+      : {
+          ...m,
+          parts: (m.parts ?? []).map((p) =>
+            p.type === "text" ? { ...p, text: maskPII(p.text) } : p
+          ),
+        }
+  );
+}
+
 function createPlainTextResponse(message: string) {
   const stream = createUIMessageStream({
     execute({ writer }) {
@@ -113,7 +150,7 @@ export async function POST(req: Request) {
     return jsonError("Invalid JSON in request body.", 400);
   }
 
-  const messages: UIMessage[] = body.messages ?? [];
+  const rawMessages: UIMessage[] = body.messages ?? [];
 
   // Read compaction summary from request headers (client sends via headers, not body).
   // The summary enters the model context as trusted history, so it is only
@@ -154,19 +191,18 @@ export async function POST(req: Request) {
     console.log(`COMPACTION SERVER: storedSummary: ${storedSummary ? storedSummary.length + ' chars' : 'none'}, summarizedUpTo: ${summarizedUpTo ?? 'none'}, feedback: ${feedback ? Object.keys(feedback).length + ' ratings' : 'none'}`);
   }
 
-  if (!Array.isArray(messages)) {
+  if (!Array.isArray(rawMessages)) {
     return jsonError("'messages' must be an array.", 400);
   }
 
-  if (messages.length > MAX_MESSAGES) {
+  if (rawMessages.length > MAX_MESSAGES) {
     return jsonError(
       `Too many messages (max ${MAX_MESSAGES}). Please start a new conversation.`,
       400
     );
   }
 
-  const latestText = getLatestUserText(messages);
-  if (latestText.length > MAX_MESSAGE_TEXT_LENGTH) {
+  if (getLatestUserText(rawMessages).length > MAX_MESSAGE_TEXT_LENGTH) {
     return jsonError(
       `Message too long (max ${MAX_MESSAGE_TEXT_LENGTH} characters).`,
       400
@@ -175,10 +211,21 @@ export async function POST(req: Request) {
 
   // Defense in depth: the client (lib/attachments.ts) already enforces file
   // count and size, but a request can bypass the browser entirely.
-  const attachmentError = validateLatestUserAttachments(messages);
+  const attachmentError = validateLatestUserAttachments(rawMessages);
   if (attachmentError) {
     return jsonError(attachmentError, 400);
   }
+
+  // --- Governance input checks (skill Section 6) ---
+  // Run on the RAW latest message so PII is detected before it is masked;
+  // everything after this point sees only the masked conversation.
+  const rawLatestText = getLatestUserText(rawMessages);
+  const governanceInput = checkInput(rawLatestText);
+  const adviceRequestCount = countAdviceRequests(allUserTexts(rawMessages));
+  const governanceTurnNote = buildGovernanceTurnNote(governanceInput, adviceRequestCount);
+  const messages = maskUserMessages(rawMessages);
+  const sessionId = String(rawMessages[0]?.id ?? "unknown");
+  const latestText = getLatestUserText(messages);
 
   // --- Route request ---
   // The header picker sends its choice here. Both values are UNTRUSTED —
@@ -296,9 +343,14 @@ export async function POST(req: Request) {
     // note that appeared and disappeared between turns would invalidate the
     // cache entry every time it changed.
     const systemPrompt = SYSTEM_PROMPT + "\n\n" + toolGuidance;
-    const compactionNote = compactionResult.compacted
-      ? "[Note: Earlier conversation context is provided as a summary. Continue naturally.]"
-      : "";
+    const compactionNote = [
+      compactionResult.compacted
+        ? "[Note: Earlier conversation context is provided as a summary. Continue naturally.]"
+        : "",
+      governanceTurnNote,
+    ]
+      .filter(Boolean)
+      .join("\n\n");
 
     // Vendors without explicit caching (OpenAI, Gemini) get `{}` here and cache
     // long prefixes on their own.
@@ -494,6 +546,43 @@ export async function POST(req: Request) {
                 data: citedSources,
               });
             }
+
+            // --- Governance output check, reconciliation and audit (skill Sections 4, 10, 11) ---
+            // The model's compliance block is parsed and checked against the
+            // deterministic rules; the stricter label wins. The browser gets
+            // only what it needs to act (label, withheld, appendDisclaimer);
+            // the full record goes to the audit log / review queue.
+            const quizExceptionActive = steps.some((s) =>
+              s.toolCalls.some(
+                (c) => c.toolName === "scoreRiskProfile" || c.toolName === "fundRecommendations"
+              )
+            );
+            const record = evaluateTurn({
+              userText: rawLatestText,
+              adviceRequestCount,
+              answerText,
+              quizExceptionActive,
+              sourceCount: citedSources.length + collectedSources.length,
+            });
+            writer.write({
+              type: "data-compliance",
+              id: "compliance",
+              data: toClientData(record),
+            });
+            if (record.withheld) {
+              console.warn(
+                `GOVERNANCE: withheld a RED draft (${record.code_hits.map((h) => h.id).join(", ")})`
+              );
+            }
+            void writeAuditEntry(
+              buildAuditEntry(record, {
+                sessionId,
+                vendor,
+                modelId,
+                userText: rawLatestText,
+                visibleAnswer: stripComplianceBlocks(answerText),
+              })
+            );
           },
         });
         writer.merge(result.toUIMessageStream({ sendReasoning: true }));

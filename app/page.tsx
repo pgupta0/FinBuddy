@@ -1,5 +1,6 @@
 "use client";
 
+import { visibleAssistantText } from "@/lib/governance/display";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Controller, useForm } from "react-hook-form";
 import { toast } from "sonner";
@@ -416,10 +417,13 @@ export default function Chat() {
     const markdown = messages
       .map((msg) => {
         const role = msg.role === "user" ? "You" : AI_NAME;
-        const text = msg.parts
-          .filter((p) => p.type === "text")
-          .map((p: any) => p.text)
-          .join("\n");
+        const text =
+          msg.role === "assistant"
+            ? visibleAssistantText(msg)
+            : msg.parts
+                .filter((p) => p.type === "text")
+                .map((p: any) => p.text)
+                .join("\n");
         return `### ${role}\n\n${text}`;
       })
       .join("\n\n---\n\n");
