@@ -10,7 +10,7 @@ import {
 } from "ai";
 import { ensureEnv } from "@/lib/env";
 import { SYSTEM_PROMPT } from "@/prompts";
-import { isContentFlagged, type ModerationResult } from "@/lib/moderation";
+import { isContentFlagged } from "@/lib/moderation";
 import {
   MODERATION_FAIL_POLICY,
   MAX_MESSAGES,
@@ -294,9 +294,7 @@ export async function POST(req: Request) {
 
   // --- Run moderation + compaction in parallel (saves ~3-5s) ---
   const [moderationResult, compactionResult] = await Promise.all([
-    latestText
-      ? isContentFlagged(latestText)
-      : Promise.resolve<ModerationResult>({ flagged: false, skipped: false, denialMessage: "" }),
+    latestText ? isContentFlagged(latestText) : Promise.resolve({ flagged: false, skipped: false, denialMessage: "" }),
     compactMessages(messages, storedSummary, summarizedUpTo, feedback),
   ]);
 
