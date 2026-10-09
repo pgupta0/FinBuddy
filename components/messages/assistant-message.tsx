@@ -180,7 +180,7 @@ export const AssistantMessage = memo(function AssistantMessage({
 
   return (
     <div className="w-full">
-      <div className="text-sm flex flex-col gap-4">
+      <div className="text-[0.9375rem] leading-[1.72] flex flex-col gap-4 text-foreground/95">
         {message.parts.map((part, i) => {
           const isPartStreaming =
             isStreaming && i === message.parts.length - 1;
@@ -217,7 +217,9 @@ export const AssistantMessage = memo(function AssistantMessage({
                   {rewrittenByIndex.get(i) ?? stripComplianceBlocks(part.text)}
                 </Response>
                 {isLastText && appendDisclaimer && (
-                  <p className="mt-3 text-xs italic text-muted-foreground">{STANDARD_DISCLAIMER}</p>
+                  <p className="mt-3.5 text-xs leading-relaxed text-muted-foreground/80 border-t border-border/40 pt-2.5">
+                    {STANDARD_DISCLAIMER}
+                  </p>
                 )}
               </div>
             );
