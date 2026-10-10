@@ -14,7 +14,7 @@ export function ChatHeader({ children }: { children: React.ReactNode }) {
         // legible against scrolled content behind it — matches the header
         // treatment in Claude/ChatGPT/Grok rather than fading to transparent
         // partway through the bar itself.
-        <div className="w-full flex py-4 px-5 bg-background/85 backdrop-blur-md border-b border-border/60 pointer-events-auto">
+        <div className="w-full flex items-center gap-2 py-3 px-3 sm:px-5 bg-background/85 backdrop-blur-md border-b border-border/60 pointer-events-auto">
             {children}
         </div>
     )

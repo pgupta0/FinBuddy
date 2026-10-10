@@ -470,7 +470,7 @@ export default function Chat() {
   }, [handleKeyDown]);
 
   return (
-    <div className="flex h-screen font-sans dark:bg-black">
+    <div className="flex h-dvh overflow-hidden font-sans dark:bg-black">
       {/* Sidebar — overlay on mobile (<md), inline on desktop */}
       {isClient && sidebarOpen && (
         <>
@@ -498,10 +498,10 @@ export default function Chat() {
         </>
       )}
 
-      <main className="brand-surface relative h-screen flex-1 min-w-0">
-        <div className={`fixed top-0 right-0 z-50 pb-16 pointer-events-none ${sidebarOpen ? 'left-0 md:left-64' : 'left-0'}`}>
+      <main className="brand-surface relative flex h-dvh min-w-0 flex-1 flex-col">
+        <div className="relative z-50 shrink-0">
           <ChatHeader>
-            <ChatHeaderBlock>
+            <ChatHeaderBlock className="flex-none items-center">
               <Button
                 variant="ghost"
                 size="icon"
@@ -512,18 +512,18 @@ export default function Chat() {
                 <PanelLeft className="size-4" />
               </Button>
             </ChatHeaderBlock>
-            <ChatHeaderBlock className="justify-center items-center">
+            <ChatHeaderBlock className="min-w-0 items-center">
               <Image
                 src="/finbuddy-wordmark.png"
                 alt={AI_NAME}
                 width={961}
                 height={230}
                 priority
-                className="h-6 w-auto select-none dark:brightness-0 dark:invert"
+                className="h-5 w-auto select-none sm:h-6 dark:brightness-0 dark:invert"
               />
             </ChatHeaderBlock>
 
-            <ChatHeaderBlock className="justify-end gap-2">
+            <ChatHeaderBlock className="flex-none items-center justify-end gap-1 sm:gap-2">
               {/* Model picker. Renders nothing unless this deployment can serve
                   more than one model (see /api/models), so a single-provider
                   deployment looks exactly as it did before. */}
@@ -565,20 +565,20 @@ export default function Chat() {
                 size="icon"
                 onClick={exportChat}
                 aria-label="Export chat"
-                className="h-8 w-8"
+                className="hidden h-8 w-8 sm:inline-flex"
               >
                 <Download className="size-4" />
               </Button>
               <ThemeToggle />
               <Button variant="outline" size="sm" onClick={newChat} aria-label="New chat">
                 <Plus className="size-4" />
-                {CLEAR_CHAT_TEXT}
+                <span className="hidden sm:inline">{CLEAR_CHAT_TEXT}</span>
               </Button>
             </ChatHeaderBlock>
           </ChatHeader>
         </div>
 
-        <div className="h-screen w-full overflow-y-auto px-3 sm:px-5 py-4 pt-[88px] pb-[170px]">
+        <div className="min-h-0 w-full flex-1 overflow-y-auto px-4 py-4 sm:px-6">
           <div
             className={`flex min-h-full flex-col items-center ${
               showHero ? "justify-center" : "justify-end"
@@ -626,9 +626,9 @@ export default function Chat() {
             short fade above the bar (.message-fade-overlay) still handles
             the transition from scrolled content into the bar; the bar
             itself now stays opaque throughout, like Claude/ChatGPT/Grok. */}
-        <div className="fixed bottom-0 left-0 right-0 z-50 overflow-visible bg-background/95 backdrop-blur-md border-t border-border/60 pt-4 pb-3">
+        <div className="relative z-40 shrink-0 border-t border-border/60 bg-background/95 pb-3 pt-3 backdrop-blur-md">
           <div className="relative mx-auto max-w-3xl px-3 sm:px-5">
-            <div className="message-fade-overlay" />
+            {!showHero && <div className="message-fade-overlay" />}
 
             {attachments.length > 0 && (
               <div className="mb-2 flex flex-wrap gap-2">
@@ -681,7 +681,7 @@ export default function Chat() {
                           {...field}
                           rows={1}
                           className="min-h-14 max-h-48 resize-none overflow-y-auto rounded-[20px] bg-card pl-[76px] pr-14 py-[18px] leading-5"
-                          placeholder="Type your message here... (Shift+Enter for a new line)"
+                          placeholder="Ask about investing…"
                           disabled={status === "streaming"}
                           aria-invalid={fieldState.invalid}
                           autoComplete="off"
@@ -765,11 +765,11 @@ export default function Chat() {
             </form>
 
             <div className="mt-2 text-center text-xs text-muted-foreground">
-              &copy; {new Date().getFullYear()} {OWNER_NAME} &middot;{" "}
+              <span className="hidden sm:inline">&copy; {new Date().getFullYear()} {OWNER_NAME} &middot;{" "}</span>
               <Link href="/terms" className="underline">
                 Terms of Use
               </Link>{" "}
-              &middot; Educational tool, not investment advice.
+              &middot; Education, not investment advice.
             </div>
           </div>
         </div>

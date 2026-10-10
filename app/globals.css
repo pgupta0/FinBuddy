@@ -68,6 +68,7 @@
      utilities. */
   --color-brand-navy: var(--brand-navy);
   --color-brand-blue: var(--brand-blue);
+  --color-brand-red: var(--brand-red);
   --color-brand-tint: var(--brand-tint);
 
   --radius-sm: calc(var(--radius) - 4px);
@@ -127,6 +128,7 @@
   /* FinBuddy brand — matches the logo mark in public/finbuddy-logo.png */
   --brand-navy: oklch(0.24 0.06 262);
   --brand-blue: oklch(0.55 0.19 259);
+  --brand-red: oklch(0.55 0.20 25);
   --brand-tint: oklch(0.96 0.02 259);
   --brand-wash-a: oklch(0.55 0.19 259 / 0.08);
   --brand-wash-b: oklch(0.55 0.19 259 / 0.05);
@@ -183,6 +185,7 @@
   /* Brand on dark: navy inverts to near-white (it is used as heading text,
      not as a fill), blue lifts for contrast, tint becomes a dark chip. */
   --brand-navy: oklch(0.97 0.005 262);
+  --brand-red: oklch(0.73 0.15 25);
   --brand-blue: oklch(0.7 0.16 259);
   --brand-tint: oklch(0.28 0.04 259);
   --brand-wash-a: oklch(0.7 0.16 259 / 0.1);
@@ -475,4 +478,19 @@ a:empty::after {
 .prose li {
   overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+/* Allow reflow at enlarged text sizes while keeping standard screens compact. */
+@media (max-height: 700px) {
+  .welcome-mascot { width: 88px; }
+  .welcome-options { margin-top: 1rem; }
+  .welcome-card { min-height: 92px; padding: 0.75rem; }
+}
+@media (max-width: 639px) and (max-height: 700px) {
+  .welcome-heading > div > p { display: none; }
+  .welcome-heading h1 { font-size: 1.5rem; }
+  .welcome-card { min-height: 60px; padding: 0.625rem; justify-content: center; }
+  .welcome-card > span:first-child,
+  .welcome-card > span:last-child { display: none; }
+  .welcome-card > span:nth-child(2) { font-size: 0.8125rem; }
 }

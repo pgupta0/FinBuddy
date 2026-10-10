@@ -108,7 +108,7 @@ export const DEFAULT_MODEL_ID = envText("DEFAULT_MODEL_ID", "claude-haiku-4-5");
 // offers. Set ENABLE_MODEL_PICKER=false to hide it and pin everyone to
 // DEFAULT_VENDOR/DEFAULT_MODEL_ID — worth doing if a paid key is configured
 // and the site is public, since otherwise any visitor can spend it.
-export const ENABLE_MODEL_PICKER = envFlag("ENABLE_MODEL_PICKER", false);
+export const ENABLE_MODEL_PICKER = envFlag("ENABLE_MODEL_PICKER", true);
 
 // Order tried when DEFAULT_VENDOR (or UTILITY_VENDOR) has no API key set.
 // This is what lets the same codebase fall back to whichever provider key is
