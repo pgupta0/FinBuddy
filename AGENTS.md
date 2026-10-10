@@ -5,6 +5,39 @@ built on the [myAI6](https://github.com/dringel/myAI6) template (MIT — see
 `NOTICE.md`). It is **not** a registered investment adviser: the SEBI-related
 guardrails in `prompts.ts` are load-bearing, not decoration. Do not loosen them.
 
+## Governance (advice boundary)
+
+`governance/advice-boundary-skill.md` is the governing instruction set for every
+turn, and `governance/rules.json` holds its deterministic checks. Both are
+versioned; changing either needs Governance-admin sign-off and a changelog row
+(skill Section 13). How it is wired:
+
+| Piece | File |
+|-------|------|
+| Prompt section (mirrors skill Sections 1-10) | `prompts.ts` → `GOVERNANCE_PROMPT` |
+| Shared wording (disclaimer, consent, redirect, grievance) | `lib/governance/constants.ts` |
+| Input checks, PII detection/masking, output rubric | `lib/governance/checks.ts` (reads `rules.json`) |
+| Compliance block parse/strip | `lib/governance/compliance-block.ts` |
+| Model vs code reconciliation, escalation | `lib/governance/reconcile.ts` |
+| Audit log + review queue | `lib/governance/audit-log.ts` |
+| Per-turn note to the model | `lib/governance/turn-note.ts` |
+| Client display (strip block, withhold, append disclaimer) | `lib/governance/display.ts` |
+| Per-answer Compliance View (badge + detail; `COMPLIANCE_VIEW=off` hides it and stops sending detail) | `components/messages/compliance-view.tsx` |
+| Tests (skill Section 14 suite) | `lib/governance/__tests__/governance.test.ts` |
+
+Flow in `app/api/chat/route.ts`: input checks on the raw message → PII masked in
+all user text before moderation, compaction or the model → per-turn note → model
+answers and appends a ```compliance block → `onFinish` runs the output rubric,
+reconciles (stricter label wins), writes a `data-compliance` part
+(`label`, `withheld`, `appendDisclaimer`) and an audit record. The client never
+shows the block; a hard RED the model did not redirect is replaced by the
+standard Educational Redirect.
+
+The risk-quiz flow (`scoreRiskProfile` / `fundRecommendations`) is kept under
+the skill's Section 5.1 product exception, which is **pending sign-off**: every
+turn that uses it is labelled at least AMBER and queued with reason
+`quiz_exception`. Do not widen the exception in code without updating the skill.
+
 ## Configuration Model
 
 Configuration is split into two places:

@@ -1,6 +1,7 @@
 import {
   streamText,
   UIMessage,
+  type TextUIPart,
   type ModelMessage,
   convertToModelMessages,
   stepCountIs,
@@ -9,7 +10,8 @@ import {
 } from "ai";
 import { ensureEnv } from "@/lib/env";
 import { SYSTEM_PROMPT } from "@/prompts";
-import { isContentFlagged } from "@/lib/moderation";
+import { outputTokenLimit } from "@/lib/ai/output-budget";
+import { isContentFlagged, type ModerationResult } from "@/lib/moderation";
 import {
   MODERATION_FAIL_POLICY,
   MAX_MESSAGES,
@@ -21,6 +23,7 @@ import {
   ENABLE_VECTOR_SEARCH,
   PROMPT_CACHING_ENABLED,
   PROMPT_CACHE_TTL,
+  COMPLIANCE_VIEW_ENABLED,
 } from "@/config";
 import { mentionsKbTerm } from "@/lib/ai/kb-keywords";
 import { signSummary, verifySummary } from "@/lib/summary-signature";
@@ -31,6 +34,9 @@ import {
   buildProviderOptions,
   providerOptionsForForcedTool,
 } from "@/lib/ai/routing";
+import { STANDARD_DISCLAIMER } from "@/lib/governance/constants";
+import { needsLearnerOnboarding, learnerContext, parseLearnerHeader } from "@/lib/learner-profile";
+import { searchPolicyFor } from "@/lib/ai/search-policy";
 import { buildToolSet, buildToolGuidance } from "@/lib/ai/tools";
 import { compactMessages } from "@/lib/compaction";
 import {
@@ -41,6 +47,11 @@ import {
   claimSupported,
 } from "@/lib/citations";
 import { uiSourceSchema, type UISource } from "@/types/data";
+import { checkInput, countAdviceRequests, maskPII } from "@/lib/governance/checks";
+import { evaluateTurn, toClientData } from "@/lib/governance/reconcile";
+import { stripComplianceBlocks } from "@/lib/governance/compliance-block";
+import { buildAuditEntry, writeAuditEntry } from "@/lib/governance/audit-log";
+import { buildGovernanceTurnNote } from "@/lib/governance/turn-note";
 
 // Next.js requires segment config to be a static literal (not imported).
 // Keep in sync with VERCEL_MAX_DURATION in config.ts and Vercel Pro plan settings.
@@ -79,7 +90,38 @@ function validateLatestUserAttachments(messages: UIMessage[]): string | null {
 }
 
 
-function createPlainTextResponse(message: string) {
+/** Text of every user message in the conversation, oldest first. */
+function allUserTexts(messages: UIMessage[]): string[] {
+  return messages
+    .filter((m) => m.role === "user")
+    .map((m) =>
+      (m.parts ?? [])
+        .filter((p): p is TextUIPart => p.type === "text")
+        .map((p) => p.text)
+        .join("\n")
+    );
+}
+
+/**
+ * Governance skill Section 6 I-2 / Section 9.2 (data minimisation): personal
+ * identifiers in user text are replaced with typed placeholders before the
+ * conversation reaches the model, moderation or compaction. The browser still
+ * holds what the user typed; nothing downstream of this point does.
+ */
+function maskUserMessages(messages: UIMessage[]): UIMessage[] {
+  return messages.map((m) =>
+    m.role !== "user"
+      ? m
+      : {
+          ...m,
+          parts: (m.parts ?? []).map((p) =>
+            p.type === "text" ? { ...p, text: maskPII(p.text) } : p
+          ),
+        }
+  );
+}
+
+function createPlainTextResponse(message: string, compliance?: ReturnType<typeof toClientData>) {
   const stream = createUIMessageStream({
     execute({ writer }) {
       const textId = "server-message";
@@ -87,6 +129,8 @@ function createPlainTextResponse(message: string) {
       writer.write({ type: "text-start", id: textId });
       writer.write({ type: "text-delta", id: textId, delta: message });
       writer.write({ type: "text-end", id: textId });
+      // Static server-authored moderation refusals contain no model draft.
+      writer.write({ type: "data-compliance", data: compliance ?? { label: "GREEN", withheld: false, appendDisclaimer: false } });
       writer.write({ type: "finish" });
     },
   });
@@ -94,17 +138,6 @@ function createPlainTextResponse(message: string) {
 }
 
 export async function POST(req: Request) {
-  // Validated here, at request time, rather than at module import time — see
-  // the comment on ensureEnv() in lib/env.ts for why that distinction matters.
-  try {
-    ensureEnv();
-  } catch {
-    return jsonError(
-      "Server misconfiguration: required environment variables are missing. Check the server logs for details.",
-      500
-    );
-  }
-
   // --- Parse and validate request body ---
   let body: any;
   try {
@@ -113,7 +146,7 @@ export async function POST(req: Request) {
     return jsonError("Invalid JSON in request body.", 400);
   }
 
-  const messages: UIMessage[] = body.messages ?? [];
+  const rawMessages: UIMessage[] = body.messages ?? [];
 
   // Read compaction summary from request headers (client sends via headers, not body).
   // The summary enters the model context as trusted history, so it is only
@@ -154,19 +187,18 @@ export async function POST(req: Request) {
     console.log(`COMPACTION SERVER: storedSummary: ${storedSummary ? storedSummary.length + ' chars' : 'none'}, summarizedUpTo: ${summarizedUpTo ?? 'none'}, feedback: ${feedback ? Object.keys(feedback).length + ' ratings' : 'none'}`);
   }
 
-  if (!Array.isArray(messages)) {
+  if (!Array.isArray(rawMessages)) {
     return jsonError("'messages' must be an array.", 400);
   }
 
-  if (messages.length > MAX_MESSAGES) {
+  if (rawMessages.length > MAX_MESSAGES) {
     return jsonError(
       `Too many messages (max ${MAX_MESSAGES}). Please start a new conversation.`,
       400
     );
   }
 
-  const latestText = getLatestUserText(messages);
-  if (latestText.length > MAX_MESSAGE_TEXT_LENGTH) {
+  if (getLatestUserText(rawMessages).length > MAX_MESSAGE_TEXT_LENGTH) {
     return jsonError(
       `Message too long (max ${MAX_MESSAGE_TEXT_LENGTH} characters).`,
       400
@@ -175,9 +207,41 @@ export async function POST(req: Request) {
 
   // Defense in depth: the client (lib/attachments.ts) already enforces file
   // count and size, but a request can bypass the browser entirely.
-  const attachmentError = validateLatestUserAttachments(messages);
+  const attachmentError = validateLatestUserAttachments(rawMessages);
   if (attachmentError) {
     return jsonError(attachmentError, 400);
+  }
+
+  // --- Governance input checks (skill Section 6) ---
+  // Run on the RAW latest message so PII is detected before it is masked;
+  // everything after this point sees only the masked conversation.
+  const rawLatestText = getLatestUserText(rawMessages);
+  const governanceInput = checkInput(rawLatestText);
+  const adviceRequestCount = countAdviceRequests(allUserTexts(rawMessages));
+  const governanceTurnNote = buildGovernanceTurnNote(governanceInput, adviceRequestCount);
+  const messages = maskUserMessages(rawMessages);
+  const sessionId = String(rawMessages[0]?.id ?? "unknown");
+  const latestText = getLatestUserText(messages);
+
+  const learning = parseLearnerHeader(req.headers.get("X-Learner-Preferences"));
+  const latestUser = messages.filter(m => m.role === "user").at(-1);
+  if (!learning && needsLearnerOnboarding(latestText) && !latestUser?.parts.some(p => p.type === "file")) {
+    const answer = "Before we begin, what would you like to understand first: investing basics, SIPs, investment types, risk, or fund costs? You can also choose Learning preferences below to set your language and explanation style. I can explain concepts, but cannot recommend where you should invest.\n\n" + STANDARD_DISCLAIMER;
+    // Static clarification still goes through deterministic governance checks and audit.
+    const record = evaluateTurn({ userText: rawLatestText, adviceRequestCount, answerText: answer, quizExceptionActive: false, sourceCount: 0 });
+    await writeAuditEntry(buildAuditEntry(record, { sessionId, vendor: "deterministic", modelId: "learner-clarification", userText: rawLatestText, visibleAnswer: answer }));
+    return createPlainTextResponse(answer, toClientData(record, COMPLIANCE_VIEW_ENABLED));
+  }
+
+  // Validated here, at request time, rather than at module import time — see
+  // the comment on ensureEnv() in lib/env.ts for why that distinction matters.
+  try {
+    ensureEnv();
+  } catch {
+    return jsonError(
+      "Server misconfiguration: required environment variables are missing. Check the server logs for details.",
+      500
+    );
   }
 
   // --- Route request ---
@@ -240,13 +304,16 @@ export async function POST(req: Request) {
   }
 
   const model = getModel(vendor, modelId);
-  const tools = buildToolSet(collectSource);
-  const toolGuidance = buildToolGuidance();
+  const searchPolicy = searchPolicyFor(latestText);
+  const tools = buildToolSet(collectSource, searchPolicy);
+  const toolGuidance = buildToolGuidance(searchPolicy);
   const providerOptions = buildProviderOptions(vendor, mode, thinkingLevel, modelId);
 
   // --- Run moderation + compaction in parallel (saves ~3-5s) ---
   const [moderationResult, compactionResult] = await Promise.all([
-    latestText ? isContentFlagged(latestText) : Promise.resolve({ flagged: false, skipped: false, denialMessage: "" }),
+    latestText
+      ? isContentFlagged(latestText)
+      : Promise.resolve<ModerationResult>({ flagged: false, skipped: false, denialMessage: "" }),
     compactMessages(messages, storedSummary, summarizedUpTo, feedback),
   ]);
 
@@ -296,9 +363,15 @@ export async function POST(req: Request) {
     // note that appeared and disappeared between turns would invalidate the
     // cache entry every time it changed.
     const systemPrompt = SYSTEM_PROMPT + "\n\n" + toolGuidance;
-    const compactionNote = compactionResult.compacted
-      ? "[Note: Earlier conversation context is provided as a summary. Continue naturally.]"
-      : "";
+    const compactionNote = [
+      compactionResult.compacted
+        ? "[Note: Earlier conversation context is provided as a summary. Continue naturally.]"
+        : "",
+      governanceTurnNote,
+      learnerContext(learning),
+    ]
+      .filter(Boolean)
+      .join("\n\n");
 
     // Vendors without explicit caching (OpenAI, Gemini) get `{}` here and cache
     // long prefixes on their own.
@@ -365,7 +438,7 @@ export async function POST(req: Request) {
           messages: [...systemMessages, ...modelMessages],
           tools,
           stopWhen: stepCountIs(maxSteps),
-          maxOutputTokens: MAX_OUTPUT_TOKENS,
+          maxOutputTokens: outputTokenLimit(MAX_OUTPUT_TOKENS, effectiveProviderOptions),
           providerOptions: effectiveProviderOptions,
           ...(forceKbSearchFirstStep
             ? {
@@ -494,6 +567,43 @@ export async function POST(req: Request) {
                 data: citedSources,
               });
             }
+
+            // --- Governance output check, reconciliation and audit (skill Sections 4, 10, 11) ---
+            // The model's compliance block is parsed and checked against the
+            // deterministic rules; the stricter label wins. The browser gets
+            // only what it needs to act (label, withheld, appendDisclaimer);
+            // the full record goes to the audit log / review queue.
+            const quizExceptionActive = steps.some((s) =>
+              s.toolCalls.some(
+                (c) => c.toolName === "scoreRiskProfile" || c.toolName === "fundRecommendations"
+              )
+            );
+            const record = evaluateTurn({
+              userText: rawLatestText,
+              adviceRequestCount,
+              answerText,
+              quizExceptionActive,
+              sourceCount: citedSources.length + collectedSources.length,
+            });
+            writer.write({
+              type: "data-compliance",
+              id: "compliance",
+              data: toClientData(record, COMPLIANCE_VIEW_ENABLED),
+            });
+            if (record.withheld) {
+              console.warn(
+                `GOVERNANCE: withheld a RED draft (${record.code_hits.map((h) => h.id).join(", ")})`
+              );
+            }
+            void writeAuditEntry(
+              buildAuditEntry(record, {
+                sessionId,
+                vendor,
+                modelId,
+                userText: rawLatestText,
+                visibleAnswer: stripComplianceBlocks(answerText),
+              })
+            );
           },
         });
         writer.merge(result.toUIMessageStream({ sendReasoning: true }));

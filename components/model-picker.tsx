@@ -132,11 +132,12 @@ export function ModelPicker({ onChange }: { onChange: (c: ModelChoice | null) =>
         <Button
           variant="ghost"
           size="sm"
-          className="h-8 gap-1.5 px-2 text-muted-foreground hover:text-foreground"
+          className="h-8 gap-1.5 rounded-lg border border-border bg-card px-2 text-foreground hover:bg-muted"
           aria-label="Change model"
           title={current ? `${current.vendorLabel} · ${current.label}` : "Change model"}
         >
-          <Cpu className="size-4 shrink-0" />
+          <Cpu className="hidden size-4 shrink-0 sm:block" />
+          <span className="text-xs font-medium sm:hidden">Model</span>
           <span className="hidden max-w-[9rem] truncate text-xs font-medium sm:inline">
             {current?.label ?? "Model"}
           </span>

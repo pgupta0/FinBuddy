@@ -97,12 +97,12 @@ export function UserMessage({
           <Pencil className="size-3.5" />
         </button>
       )}
-      <div className="whitespace-pre-wrap max-w-[85%] sm:max-w-lg w-fit px-4 py-3 rounded-[20px] bg-muted break-words">
-        <div className="text-sm">
+      <div className="whitespace-pre-wrap max-w-[85%] sm:max-w-lg w-fit px-4.5 py-3 rounded-[22px] bg-muted/90 border border-border/40 shadow-xs break-words">
+        <div className="text-[0.9375rem] leading-relaxed text-foreground">
           {message.parts.map((part, i) => {
             switch (part.type) {
               case "text":
-                return <Response key={`${message.id}-${i}`}>{part.text}</Response>;
+                return <Response key={`${message.id}-${i}`} isAnimating={false}>{part.text}</Response>;
             }
           })}
         </div>
