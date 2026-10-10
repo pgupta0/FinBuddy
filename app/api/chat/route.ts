@@ -34,6 +34,9 @@ import {
   buildProviderOptions,
   providerOptionsForForcedTool,
 } from "@/lib/ai/routing";
+import { STANDARD_DISCLAIMER } from "@/lib/governance/constants";
+import { needsLearnerOnboarding, learnerContext, parseLearnerHeader } from "@/lib/learner-profile";
+import { searchPolicyFor } from "@/lib/ai/search-policy";
 import { buildToolSet, buildToolGuidance } from "@/lib/ai/tools";
 import { compactMessages } from "@/lib/compaction";
 import {
@@ -118,7 +121,7 @@ function maskUserMessages(messages: UIMessage[]): UIMessage[] {
   );
 }
 
-function createPlainTextResponse(message: string) {
+function createPlainTextResponse(message: string, compliance?: ReturnType<typeof toClientData>) {
   const stream = createUIMessageStream({
     execute({ writer }) {
       const textId = "server-message";
@@ -127,7 +130,7 @@ function createPlainTextResponse(message: string) {
       writer.write({ type: "text-delta", id: textId, delta: message });
       writer.write({ type: "text-end", id: textId });
       // Static server-authored moderation refusals contain no model draft.
-      writer.write({ type: "data-compliance", data: { label: "GREEN", withheld: false, appendDisclaimer: false } });
+      writer.write({ type: "data-compliance", data: compliance ?? { label: "GREEN", withheld: false, appendDisclaimer: false } });
       writer.write({ type: "finish" });
     },
   });
@@ -135,17 +138,6 @@ function createPlainTextResponse(message: string) {
 }
 
 export async function POST(req: Request) {
-  // Validated here, at request time, rather than at module import time — see
-  // the comment on ensureEnv() in lib/env.ts for why that distinction matters.
-  try {
-    ensureEnv();
-  } catch {
-    return jsonError(
-      "Server misconfiguration: required environment variables are missing. Check the server logs for details.",
-      500
-    );
-  }
-
   // --- Parse and validate request body ---
   let body: any;
   try {
@@ -231,6 +223,27 @@ export async function POST(req: Request) {
   const sessionId = String(rawMessages[0]?.id ?? "unknown");
   const latestText = getLatestUserText(messages);
 
+  const learning = parseLearnerHeader(req.headers.get("X-Learner-Preferences"));
+  const latestUser = messages.filter(m => m.role === "user").at(-1);
+  if (!learning && needsLearnerOnboarding(latestText) && !latestUser?.parts.some(p => p.type === "file")) {
+    const answer = "Before we begin, what would you like to understand first: investing basics, SIPs, investment types, risk, or fund costs? You can also choose Learning preferences below to set your language and explanation style. I can explain concepts, but cannot recommend where you should invest.\n\n" + STANDARD_DISCLAIMER;
+    // Static clarification still goes through deterministic governance checks and audit.
+    const record = evaluateTurn({ userText: rawLatestText, adviceRequestCount, answerText: answer, quizExceptionActive: false, sourceCount: 0 });
+    await writeAuditEntry(buildAuditEntry(record, { sessionId, vendor: "deterministic", modelId: "learner-clarification", userText: rawLatestText, visibleAnswer: answer }));
+    return createPlainTextResponse(answer, toClientData(record, COMPLIANCE_VIEW_ENABLED));
+  }
+
+  // Validated here, at request time, rather than at module import time — see
+  // the comment on ensureEnv() in lib/env.ts for why that distinction matters.
+  try {
+    ensureEnv();
+  } catch {
+    return jsonError(
+      "Server misconfiguration: required environment variables are missing. Check the server logs for details.",
+      500
+    );
+  }
+
   // --- Route request ---
   // The header picker sends its choice here. Both values are UNTRUSTED —
   // routeRequest validates them against the catalog and the keys that are
@@ -291,8 +304,9 @@ export async function POST(req: Request) {
   }
 
   const model = getModel(vendor, modelId);
-  const tools = buildToolSet(collectSource);
-  const toolGuidance = buildToolGuidance();
+  const searchPolicy = searchPolicyFor(latestText);
+  const tools = buildToolSet(collectSource, searchPolicy);
+  const toolGuidance = buildToolGuidance(searchPolicy);
   const providerOptions = buildProviderOptions(vendor, mode, thinkingLevel, modelId);
 
   // --- Run moderation + compaction in parallel (saves ~3-5s) ---
@@ -354,6 +368,7 @@ export async function POST(req: Request) {
         ? "[Note: Earlier conversation context is provided as a summary. Continue naturally.]"
         : "",
       governanceTurnNote,
+      learnerContext(learning),
     ]
       .filter(Boolean)
       .join("\n\n");

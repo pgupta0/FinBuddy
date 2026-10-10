@@ -1,5 +1,8 @@
 "use client";
 
+import { LearnerOnboarding } from "@/components/learner-onboarding";
+import { needsLearnerOnboarding, firstLessonPrompt, type LearnerProfile } from "@/lib/learner-profile";
+import { loadLearnerProfile, saveLearnerProfile, deleteLearnerProfile } from "@/lib/learner-profile-storage";
 import { visibleAssistantText } from "@/lib/governance/display";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Controller, useForm } from "react-hook-form";
@@ -70,6 +73,11 @@ export default function Chat() {
   const [isClient, setIsClient] = useState(false);
   const [durations, setDurations] = useState<Record<string, number>>({});
   const [activeConvId, setActiveConvId] = useState<string | null>(null);
+  // Session cache; dialog display uses learnerInitial state.
+  const [learnerProfiles] = useState(() => new Map<string, LearnerProfile>());
+  const [learnerOpen, setLearnerOpen] = useState(false);
+  const [learnerInitial, setLearnerInitial] = useState<LearnerProfile | null>(null);
+  const pendingLesson = useRef<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showContextMemory, setShowContextMemory] = useState(false);
   const welcomeMessageShownRef = useRef<boolean>(false);
@@ -144,6 +152,8 @@ export default function Chat() {
             headers.set("X-Feedback", btoa(JSON.stringify(fb)));
           }
         }
+        const learning = activeConvIdRef.current ? learnerProfiles.get(activeConvIdRef.current) : null;
+        if (learning) headers.set("X-Learner-Preferences", JSON.stringify(learning.preferences));
         // Model chosen in the header picker. The server treats these as
         // untrusted and re-validates them against the catalog and the keys it
         // actually has (see routeRequest in lib/ai/routing.ts), so an unknown
@@ -229,6 +239,9 @@ export default function Chat() {
       convId = newConv.id;
     }
 
+    activeConvIdRef.current = convId;
+    const learning = loadLearnerProfile(convId);
+    if (learning) learnerProfiles.set(convId, learning);
     setActiveConvId(convId);
     const data = loadConversationData(convId);
     setMessages(data.messages);
@@ -248,7 +261,7 @@ export default function Chat() {
       });
       welcomeMessageShownRef.current = true;
     }
-  }, []);
+  }, [learnerProfiles, setMessages]);
 
   // Persist messages whenever they change (preserving compaction fields)
   useEffect(() => {
@@ -343,6 +356,13 @@ export default function Chat() {
   async function submitText(text: string, files: PendingAttachment[] = []) {
     const trimmed = text.trim();
     if (!trimmed && files.length === 0) return;
+    const id = activeConvIdRef.current;
+    if (files.length === 0 && id && !learnerProfiles.has(id) && needsLearnerOnboarding(trimmed)) {
+      pendingLesson.current = trimmed;
+      setLearnerInitial(null);
+      setLearnerOpen(true);
+      return;
+    }
 
     const { fileParts, textAppendix } = await buildAttachmentPayload(files);
     const finalText = textAppendix ? `${trimmed}\n\n${textAppendix}`.trim() : trimmed;
@@ -357,6 +377,18 @@ export default function Chat() {
     form.reset();
     files.forEach(revokePreview);
     setAttachments([]);
+  }
+
+  function completeLearning(profile: LearnerProfile) {
+    const id = activeConvIdRef.current;
+    if (!id) return;
+    const startLesson = pendingLesson.current !== null;
+    if (startLesson) profile = { ...profile, exploredTopics: [...new Set([...profile.exploredTopics, profile.preferences.goal])] };
+    learnerProfiles.set(id, profile);
+    if (!saveLearnerProfile(id, profile)) toast.error("Could not save on this device. Preferences are available for this page session.");
+    setLearnerOpen(false);
+    pendingLesson.current = null;
+    if (startLesson) void submitText(firstLessonPrompt(profile.preferences));
   }
 
   function onSubmit(data: z.infer<typeof formSchema>) {
@@ -381,6 +413,12 @@ export default function Chat() {
     isClient && status === "ready" && !messages.some((m) => m.role === "user");
 
   function switchConversation(id: string) {
+    activeConvIdRef.current = id;
+    summaryRef.current = loadCompactedSummary(id);
+    const learning = loadLearnerProfile(id);
+    if (learning) learnerProfiles.set(id, learning);
+    setLearnerOpen(false);
+    pendingLesson.current = null;
     setActiveConvId(id);
     const data = loadConversationData(id);
     setMessages(data.messages);
@@ -390,6 +428,10 @@ export default function Chat() {
 
   function newChat() {
     const conv = createConversation();
+    activeConvIdRef.current = conv.id;
+    summaryRef.current = null;
+    setLearnerOpen(false);
+    pendingLesson.current = null;
     setActiveConvId(conv.id);
     setDurations({});
     welcomeMessageShownRef.current = false;
@@ -498,6 +540,11 @@ export default function Chat() {
         </>
       )}
 
+      {learnerOpen && <LearnerOnboarding open initial={learnerInitial}
+        onClose={() => { setLearnerOpen(false); pendingLesson.current = null; }}
+        onComplete={completeLearning}
+        onSkip={() => { const start = pendingLesson.current !== null; pendingLesson.current = null; setLearnerOpen(false); if (start) void submitText("Explain saving versus investing briefly as general financial education. Do not recommend investments for me."); }}
+        onForget={() => { if (activeConvId) { learnerProfiles.delete(activeConvId); deleteLearnerProfile(activeConvId); } pendingLesson.current = null; setLearnerOpen(false); toast.success("Learning preferences deleted"); }} />}
       <main className="brand-surface relative flex h-dvh min-w-0 flex-1 flex-col">
         <div className="relative z-50 shrink-0">
           <ChatHeader>
@@ -766,6 +813,7 @@ export default function Chat() {
 
             <div className="mt-2 text-center text-xs text-muted-foreground">
               <span className="hidden sm:inline">&copy; {new Date().getFullYear()} {OWNER_NAME} &middot;{" "}</span>
+              <button type="button" disabled={status === "streaming" || status === "submitted"} onClick={() => { pendingLesson.current = null; setLearnerInitial(activeConvId ? learnerProfiles.get(activeConvId) ?? null : null); setLearnerOpen(true); }} className="mr-2 underline">Learning preferences</button>
               <Link href="/terms" className="underline">
                 Terms of Use
               </Link>{" "}
