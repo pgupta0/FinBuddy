@@ -36,7 +36,7 @@ export type RouteResult = {
  * SAME per-day quota the moderation classifier also draws from (see
  * config.ts's MAX_STEPS_ECONOMY comment) — so the cheaper the model, the
  * tighter the budget needs to be to avoid running that quota out mid-day.
- * Paid/standard/premium models keep the full MAX_STEPS budget.
+ * Other models use MAX_STEPS. Both defaults currently allow four steps.
  */
 function stepBudgetFor(vendor: Vendor, modelId: string): number {
   const spec = providerSpec(vendor);

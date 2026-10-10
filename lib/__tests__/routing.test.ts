@@ -6,6 +6,7 @@ import {
   providerOptionsForForcedTool,
 } from "@/lib/ai/routing";
 import { UIMessage } from "ai";
+import { DEFAULT_VENDOR, THINKING_BUDGET_LOW, THINKING_BUDGET_HIGH } from "@/config";
 
 function makeMessages(text: string): UIMessage[] {
   return [
@@ -49,10 +50,10 @@ describe("routeRequest", () => {
   it("defaults to chat mode for simple queries", () => {
     const result = routeRequest(makeMessages("What is an expense ratio?"));
     expect(result.mode).toBe("chat");
-    // DEFAULT_VENDOR in config.ts — currently "google" (Gemini). No provider
+    // DEFAULT_VENDOR in config.ts — Anthropic by project requirement. No provider
     // key is set in the test environment, so resolveVendor() returns the
     // configured default unchanged rather than falling back to anything else.
-    expect(result.vendor).toBe("google");
+    expect(result.vendor).toBe(DEFAULT_VENDOR);
   });
 
   it("stays in chat mode for a plain glossary lookup", () => {
@@ -130,7 +131,7 @@ describe("buildProviderOptions", () => {
       "claude-haiku-4-5"
     );
     expect((opts.anthropic as any)?.thinking.type).toBe("enabled");
-    expect((opts.anthropic as any)?.thinking.budgetTokens).toBe(15000);
+    expect((opts.anthropic as any)?.thinking.budgetTokens).toBe(THINKING_BUDGET_HIGH);
   });
 
   it("enables low thinking budget for anthropic chat mode", () => {
@@ -141,7 +142,7 @@ describe("buildProviderOptions", () => {
       "claude-haiku-4-5"
     );
     expect((opts.anthropic as any)?.thinking.type).toBe("enabled");
-    expect((opts.anthropic as any)?.thinking.budgetTokens).toBe(2000);
+    expect((opts.anthropic as any)?.thinking.budgetTokens).toBe(THINKING_BUDGET_LOW);
   });
 
   it("sends adaptive thinking for anthropic models that reject budgets", () => {
@@ -192,7 +193,7 @@ describe("buildProviderOptions", () => {
       "high",
       "gemini-2.5-flash"
     );
-    expect((g25.google as any)?.thinkingConfig.thinkingBudget).toBe(15000);
+    expect((g25.google as any)?.thinkingConfig.thinkingBudget).toBe(THINKING_BUDGET_HIGH);
     expect((g25.google as any)?.thinkingConfig.thinkingLevel).toBeUndefined();
   });
 

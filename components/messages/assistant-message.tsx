@@ -131,10 +131,11 @@ export const AssistantMessage = memo(function AssistantMessage({
   // standard Educational Redirect. `appendDisclaimer`: the answer was
   // substantive but lacked the required disclaimer, so the app adds it.
   const compliance = getComplianceData(message);
+  const pendingReview = !compliance;
   const withheld = compliance?.withheld === true;
   const appendDisclaimer = compliance?.appendDisclaimer === true && !withheld;
   // A withheld draft's citations belong to text the user no longer sees.
-  const sources = withheld ? [] : sourcesPart?.data ?? [];
+  const sources = withheld || pendingReview ? [] : sourcesPart?.data ?? [];
 
   // Canonicalize citations across ALL text parts with shared numbering state —
   // the same transform the server runs on the joined text to build the Sources
@@ -189,6 +190,13 @@ export const AssistantMessage = memo(function AssistantMessage({
 
           if (part.type === "text") {
             const isLastText = i === lastTextIndex;
+            if (pendingReview) {
+              return isLastText ? (
+                <p key={`${message.id}-${i}`} role="status" className="text-sm text-muted-foreground">
+                  {isStreaming ? "Preparing and checking your explanation…" : "This answer could not be checked. Please try again."}
+                </p>
+              ) : null;
+            }
             if (withheld) {
               // Show the safe redirect once, in place of the final answer.
               return isLastText ? (
@@ -224,6 +232,7 @@ export const AssistantMessage = memo(function AssistantMessage({
               </div>
             );
           } else if (part.type === "reasoning") {
+            if (pendingReview || withheld) return null;
             return (
               <ReasoningPart
                 key={`${message.id}-${i}`}
@@ -256,6 +265,7 @@ export const AssistantMessage = memo(function AssistantMessage({
               />
             );
           } else if (part.type === "tool-scoreRiskProfile") {
+            if (pendingReview || withheld) return null;
             if ("state" in part && part.state === "output-available" && "output" in part) {
               return (
                 <RiskProfileResultCard
@@ -271,6 +281,7 @@ export const AssistantMessage = memo(function AssistantMessage({
               />
             );
           } else if (part.type === "tool-fundRecommendations") {
+            if (pendingReview || withheld) return null;
             if ("state" in part && part.state === "output-available" && "output" in part) {
               return (
                 <FundRecommendationsCard
@@ -310,7 +321,7 @@ export const AssistantMessage = memo(function AssistantMessage({
       </div>
       {sources.length > 0 && <Sources sources={sources} />}
       {compliance && !isStreaming && <ComplianceView data={compliance} />}
-      {showActions && (
+      {showActions && !pendingReview && (
         <div className="flex items-center gap-1 mt-1">
           <Button
             variant="ghost"

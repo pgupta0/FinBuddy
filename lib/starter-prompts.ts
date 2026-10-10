@@ -33,10 +33,10 @@ export type StarterPrompt = {
 export const STARTER_PROMPTS: StarterPrompt[] = [
   {
     id: "where-to-invest",
-    label: "Where do I invest?",
+    label: "Understand asset classes",
     hint: "Choosing between asset classes",
     prompt:
-      "Where should I invest? Explain how a first-time Indian investor should think about splitting money across asset classes — equity, debt, gold and cash — and what actually drives that choice.",
+      "Explain equity, debt, gold and cash in simple language. How do these asset classes differ in risk and liquidity? Keep it short and educational.",
     icon: Compass,
   },
   {
@@ -49,8 +49,8 @@ export const STARTER_PROMPTS: StarterPrompt[] = [
   },
   {
     id: "risk-assessment",
-    label: "My risk assessment",
-    hint: "Find your investor profile",
+    label: "Explore the risk quiz",
+    hint: "Five questions; educational illustration",
     prompt:
       "I'd like to work out my risk profile. Please start the risk assessment quiz.",
     icon: ShieldCheck,
@@ -65,10 +65,10 @@ export const STARTER_PROMPTS: StarterPrompt[] = [
   },
   {
     id: "explain-a-term",
-    label: "Explain a term",
+    label: "Learn one term",
     hint: "Jargon in plain English",
     prompt:
-      "Explain some common investing terms to me in plain English — start with expense ratio, NAV, and the difference between direct and regular plans, and tell me why each one affects my returns.",
+      "What is an expense ratio? Explain it briefly with one simple example.",
     icon: BookOpen,
   },
   {
@@ -76,7 +76,7 @@ export const STARTER_PROMPTS: StarterPrompt[] = [
     label: "Compare strategies",
     hint: "Risk parity, core-satellite, endowment",
     prompt:
-      "Compare the main allocation strategies — risk parity, core-satellite and endowment-style. How do they differ, and what kind of investor is each one usually suited to?",
+      "Compare the main allocation strategies — risk parity, core-satellite and endowment-style. Explain their general differences without matching a strategy to me. Keep the comparison brief.",
     icon: Scale,
   },
 ];

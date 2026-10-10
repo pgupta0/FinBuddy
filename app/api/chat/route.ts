@@ -10,6 +10,7 @@ import {
 } from "ai";
 import { ensureEnv } from "@/lib/env";
 import { SYSTEM_PROMPT } from "@/prompts";
+import { outputTokenLimit } from "@/lib/ai/output-budget";
 import { isContentFlagged, type ModerationResult } from "@/lib/moderation";
 import {
   MODERATION_FAIL_POLICY,
@@ -125,6 +126,8 @@ function createPlainTextResponse(message: string) {
       writer.write({ type: "text-start", id: textId });
       writer.write({ type: "text-delta", id: textId, delta: message });
       writer.write({ type: "text-end", id: textId });
+      // Static server-authored moderation refusals contain no model draft.
+      writer.write({ type: "data-compliance", data: { label: "GREEN", withheld: false, appendDisclaimer: false } });
       writer.write({ type: "finish" });
     },
   });
@@ -420,7 +423,7 @@ export async function POST(req: Request) {
           messages: [...systemMessages, ...modelMessages],
           tools,
           stopWhen: stepCountIs(maxSteps),
-          maxOutputTokens: MAX_OUTPUT_TOKENS,
+          maxOutputTokens: outputTokenLimit(MAX_OUTPUT_TOKENS, effectiveProviderOptions),
           providerOptions: effectiveProviderOptions,
           ...(forceKbSearchFirstStep
             ? {

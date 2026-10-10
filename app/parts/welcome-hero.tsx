@@ -25,18 +25,18 @@ export function WelcomeHero({
           <div className="mb-6 h-1 w-12 rounded-full bg-brand-blue" />
 
           <h1 className="text-4xl sm:text-5xl font-bold tracking-tight leading-[1.05] text-brand-navy">
-            Your Finance
+            Understand Your
             <br />
-            <span className="text-brand-blue">Copilot</span>
+            <span className="text-brand-blue">Money</span>
           </h1>
 
           <p className="mt-5 text-xl font-semibold text-muted-foreground">
-            Ask. Analyze. Act.
+            Learn a little. Understand more.
           </p>
 
           <p className="mt-3 max-w-md text-base leading-relaxed text-muted-foreground">
-            Get instant insights, simplified explanations and data-driven
-            answers for all your finance questions.
+            Start with a simple question. Explore investing concepts with short
+            explanations, dated sources, and examples you can understand.
           </p>
         </div>
 
@@ -45,7 +45,7 @@ export function WelcomeHero({
         <div className="relative hidden sm:block">
           <div className="relative mx-auto w-fit">
             <div className="absolute -top-2 left-0 z-10 rounded-2xl rounded-bl-sm border border-border bg-card px-4 py-2.5 text-sm font-medium text-brand-navy shadow-sm">
-              How can I help you today?
+              Let’s learn one thing today.
             </div>
             <Image
               src="/finbuddy-mascot.png"
@@ -60,10 +60,15 @@ export function WelcomeHero({
         </div>
       </div>
 
+      <p className="mt-6 rounded-xl border border-brand-blue/20 bg-brand-tint px-4 py-3 text-sm text-muted-foreground">
+        General financial education. FinBuddy is not a SEBI-registered adviser.
+        You can learn without sharing account numbers or personal financial details.
+      </p>
+
       {/* --- Starter prompts --- */}
       <div className="mt-10">
         <h2 className="mb-4 text-lg font-semibold text-brand-navy">
-          Try asking&hellip;
+          Choose your starting point
         </h2>
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

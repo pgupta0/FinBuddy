@@ -18,7 +18,8 @@ export function getComplianceData(message: UIMessage): ClientComplianceData | un
 /** The text a user should see (and copy / export) for an assistant message. */
 export function visibleAssistantText(message: UIMessage): string {
   const compliance = getComplianceData(message);
-  if (compliance?.withheld) return WITHHELD_REDIRECT;
+  if (!compliance) return ""; // No copy/export of an unchecked draft.
+  if (compliance.withheld) return WITHHELD_REDIRECT;
   const text = message.parts
     .filter((p) => p.type === "text")
     .map((p) => stripComplianceBlocks((p as { text: string }).text))
