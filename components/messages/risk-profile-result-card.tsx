@@ -107,11 +107,12 @@ export function RiskProfileResultCard({ output }: { output: RiskProfileToolOutpu
         </span>
       </div>
 
+      <p className="text-xs leading-relaxed text-muted-foreground">This fixed quiz does not establish which investments suit you. Short-term cash needs and ability to bear losses require separate assessment by a registered adviser.</p>
       <div className="flex justify-center">
         <RiskGauge score={output.score} />
       </div>
       <p className="-mt-2 text-center text-[11px] text-muted-foreground">
-        Styled after SEBI&rsquo;s mandatory mutual-fund Riskometer
+        Educational quiz illustration — not a scheme Riskometer or a validated suitability assessment
       </p>
 
       <div>
@@ -149,7 +150,7 @@ export function RiskProfileResultCard({ output }: { output: RiskProfileToolOutpu
       )}
 
       <p className="text-xs text-muted-foreground">
-        Matched real-world category: <span className="font-medium text-foreground">{output.fundCategory}</span>
+        Illustrative category: <span className="font-medium text-foreground">{output.fundCategory}</span>
       </p>
     </div>
   );

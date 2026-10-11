@@ -17,7 +17,11 @@ import { RiskQuizWidget, type AddRiskQuizOutput } from "./risk-quiz-widget";
 import { RiskProfileResultCard } from "./risk-profile-result-card";
 import type { RiskProfileToolOutput } from "@/app/api/chat/tools/score-risk-profile";
 import { FundRecommendationsCard } from "./fund-recommendations-card";
+import { ComplianceView } from "./compliance-view";
 import type { FundRecommendationsOutput } from "@/app/api/chat/tools/fund-recommendations";
+import { stripComplianceBlocks } from "@/lib/governance/compliance-block";
+import { STANDARD_DISCLAIMER, WITHHELD_REDIRECT } from "@/lib/governance/constants";
+import { getComplianceData, visibleAssistantText } from "@/lib/governance/display";
 
 function FeedbackButtons({ messageId, conversationId }: { messageId: string; conversationId?: string }) {
   const [rating, setRating] = useState<"up" | "down" | null>(() => {
@@ -104,11 +108,7 @@ export const AssistantMessage = memo(function AssistantMessage({
   const [copied, setCopied] = useState(false);
 
   async function handleCopy() {
-    const text = message.parts
-      .filter((p) => p.type === "text")
-      .map((p) => (p as { text: string }).text)
-      .join("\n\n")
-      .trim();
+    const text = visibleAssistantText(message);
     if (!text) return;
     try {
       await navigator.clipboard.writeText(text);
@@ -125,7 +125,17 @@ export const AssistantMessage = memo(function AssistantMessage({
   const sourcesPart = message.parts.find((p) => p.type === "data-sources") as
     | { type: "data-sources"; data: UISource[] }
     | undefined;
-  const sources = sourcesPart?.data ?? [];
+  // Governance verdict for this turn (skill Sections 4 and 10), sent by the
+  // server once the answer is complete. `withheld`: the deterministic checks
+  // found advice the model did not redirect, so the draft is replaced by the
+  // standard Educational Redirect. `appendDisclaimer`: the answer was
+  // substantive but lacked the required disclaimer, so the app adds it.
+  const compliance = getComplianceData(message);
+  const pendingReview = !compliance;
+  const withheld = compliance?.withheld === true;
+  const appendDisclaimer = compliance?.appendDisclaimer === true && !withheld;
+  // A withheld draft's citations belong to text the user no longer sees.
+  const sources = withheld || pendingReview ? [] : sourcesPart?.data ?? [];
 
   // Canonicalize citations across ALL text parts with shared numbering state —
   // the same transform the server runs on the joined text to build the Sources
@@ -134,8 +144,10 @@ export const AssistantMessage = memo(function AssistantMessage({
   message.parts.forEach((p, i) => {
     if (p.type === "text") textPartIndexes.push(i);
   });
+  // The model ends every answer with a machine-readable ```compliance block
+  // (governance skill Section 10); it is never shown to the user.
   const rewrittenTexts = rewriteCitationsInParts(
-    textPartIndexes.map((i) => (message.parts[i] as { text: string }).text)
+    textPartIndexes.map((i) => stripComplianceBlocks((message.parts[i] as { text: string }).text))
   );
   const rewrittenByIndex = new Map<number, string>(
     textPartIndexes.map((partIndex, j) => [partIndex, rewrittenTexts[j]])
@@ -169,7 +181,7 @@ export const AssistantMessage = memo(function AssistantMessage({
 
   return (
     <div className="w-full">
-      <div className="text-sm flex flex-col gap-4">
+      <div className="text-[0.9375rem] leading-[1.72] flex flex-col gap-4 text-foreground/95">
         {message.parts.map((part, i) => {
           const isPartStreaming =
             isStreaming && i === message.parts.length - 1;
@@ -178,6 +190,21 @@ export const AssistantMessage = memo(function AssistantMessage({
 
           if (part.type === "text") {
             const isLastText = i === lastTextIndex;
+            if (pendingReview) {
+              return isLastText ? (
+                <p key={`${message.id}-${i}`} role="status" className="text-sm text-muted-foreground">
+                  {isStreaming ? "Preparing and checking your explanation…" : "This answer could not be checked. Please try again."}
+                </p>
+              ) : null;
+            }
+            if (withheld) {
+              // Show the safe redirect once, in place of the final answer.
+              return isLastText ? (
+                <div key={`${message.id}-${i}`}>
+                  <Response isAnimating={false}>{WITHHELD_REDIRECT}</Response>
+                </div>
+              ) : null;
+            }
             const isAfterTool = hasToolBefore.has(i);
             // Check if there's already an intermediate text part after tools (processing already shown)
             const hasIntermediateProcessingText = isLastText && seenTool && message.parts.some(
@@ -195,11 +222,17 @@ export const AssistantMessage = memo(function AssistantMessage({
                   <ProcessingIndicator isStreaming={isPartStreaming} />
                 )}
                 <Response isAnimating={isPartStreaming}>
-                  {rewrittenByIndex.get(i) ?? part.text}
+                  {rewrittenByIndex.get(i) ?? stripComplianceBlocks(part.text)}
                 </Response>
+                {isLastText && appendDisclaimer && (
+                  <p className="mt-3.5 text-xs leading-relaxed text-muted-foreground/80 border-t border-border/40 pt-2.5">
+                    {STANDARD_DISCLAIMER}
+                  </p>
+                )}
               </div>
             );
           } else if (part.type === "reasoning") {
+            if (pendingReview || withheld) return null;
             return (
               <ReasoningPart
                 key={`${message.id}-${i}`}
@@ -232,6 +265,7 @@ export const AssistantMessage = memo(function AssistantMessage({
               />
             );
           } else if (part.type === "tool-scoreRiskProfile") {
+            if (pendingReview || withheld) return null;
             if ("state" in part && part.state === "output-available" && "output" in part) {
               return (
                 <RiskProfileResultCard
@@ -247,6 +281,7 @@ export const AssistantMessage = memo(function AssistantMessage({
               />
             );
           } else if (part.type === "tool-fundRecommendations") {
+            if (pendingReview || withheld) return null;
             if ("state" in part && part.state === "output-available" && "output" in part) {
               return (
                 <FundRecommendationsCard
@@ -285,7 +320,8 @@ export const AssistantMessage = memo(function AssistantMessage({
         })}
       </div>
       {sources.length > 0 && <Sources sources={sources} />}
-      {showActions && (
+      {compliance && !isStreaming && <ComplianceView data={compliance} />}
+      {showActions && !pendingReview && (
         <div className="flex items-center gap-1 mt-1">
           <Button
             variant="ghost"

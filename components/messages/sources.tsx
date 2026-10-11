@@ -55,6 +55,9 @@ export function Sources({ sources }: { sources: UISource[] }) {
 
       <CollapsibleContent className="data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-1 data-[state=open]:slide-in-from-top-1 data-[state=closed]:animate-out data-[state=open]:animate-in">
         <div className="mt-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2">
+          <p className="mb-2 text-xs text-muted-foreground">
+            Citation checks compare wording with retrieved text; they do not independently verify facts.
+          </p>
           <ul className="flex max-h-56 flex-col gap-1.5 overflow-y-auto">
             {sources.map((s, i) => {
               const icon =
@@ -91,7 +94,7 @@ export function Sources({ sources }: { sources: UISource[] }) {
                       {s.verified === true && (
                         <Check
                           className="size-3.5 shrink-0 text-green-600 dark:text-green-500"
-                          aria-label="Citation verified against the source"
+                          aria-label="Citation wording matched retrieved source text"
                         />
                       )}
                     </div>

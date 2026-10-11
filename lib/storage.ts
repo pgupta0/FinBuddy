@@ -1,3 +1,4 @@
+import { deleteLearnerProfile } from "./learner-profile-storage";
 import { UIMessage } from "ai";
 import { nanoid } from "nanoid";
 
@@ -58,6 +59,7 @@ export function createConversation(title?: string): Conversation {
 }
 
 export function deleteConversation(id: string) {
+  deleteLearnerProfile(id);
   const index = getIndex().filter((c) => c.id !== id);
   saveIndex(index);
   if (typeof window !== "undefined") {

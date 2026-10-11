@@ -51,7 +51,7 @@ export function MessageWall({ messages, status, durations, onDurationChange, con
 
     return (
         <div className="relative max-w-3xl w-full">
-            <div className="relative flex flex-col gap-4">
+            <div className="relative flex flex-col gap-6">
                 {messages.map((message, messageIndex) => {
                     const isLastMessage = messageIndex === messages.length - 1;
                     // Regenerate only makes sense on the most recent assistant

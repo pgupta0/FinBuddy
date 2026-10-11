@@ -1,0 +1,145 @@
+{
+  "mode": "offline mocked UI; not model quality or real-user research",
+  "checks": [
+    {
+      "label": "six cards fit horizontally 1366x768 light",
+      "passed": true
+    },
+    {
+      "label": "homepage needs no content scroll 1366x768 light",
+      "passed": true
+    },
+    {
+      "label": "six cards fit horizontally 1366x768 dark",
+      "passed": true
+    },
+    {
+      "label": "homepage needs no content scroll 1366x768 dark",
+      "passed": true
+    },
+    {
+      "label": "six cards fit horizontally 768x1024 light",
+      "passed": true
+    },
+    {
+      "label": "homepage needs no content scroll 768x1024 light",
+      "passed": true
+    },
+    {
+      "label": "six cards fit horizontally 768x1024 dark",
+      "passed": true
+    },
+    {
+      "label": "homepage needs no content scroll 768x1024 dark",
+      "passed": true
+    },
+    {
+      "label": "six cards fit horizontally 390x844 light",
+      "passed": true
+    },
+    {
+      "label": "homepage needs no content scroll 390x844 light",
+      "passed": true
+    },
+    {
+      "label": "six cards fit horizontally 390x844 dark",
+      "passed": true
+    },
+    {
+      "label": "homepage needs no content scroll 390x844 dark",
+      "passed": true
+    },
+    {
+      "label": "six cards fit horizontally 320x568 light",
+      "passed": true
+    },
+    {
+      "label": "homepage needs no content scroll 320x568 light",
+      "passed": true
+    },
+    {
+      "label": "six cards fit horizontally 320x568 dark",
+      "passed": true
+    },
+    {
+      "label": "homepage needs no content scroll 320x568 dark",
+      "passed": true
+    },
+    {
+      "label": "six cards fit horizontally 844x390 light",
+      "passed": true
+    },
+    {
+      "label": "six cards fit horizontally 844x390 dark",
+      "passed": true
+    },
+    {
+      "label": "onboarding has zero chat/API calls",
+      "passed": true
+    },
+    {
+      "label": "onboarding requires an explicit answer",
+      "passed": true
+    },
+    {
+      "label": "model selection reaches request",
+      "passed": true
+    },
+    {
+      "label": "profile shapes the first lesson request",
+      "passed": true
+    },
+    {
+      "label": "approved mock answer displays",
+      "passed": true
+    },
+    {
+      "label": "unsafe source URL is not clickable",
+      "passed": true
+    },
+    {
+      "label": "Markdown profile exports",
+      "passed": true
+    },
+    {
+      "label": "opted-in preferences survive reload",
+      "passed": true
+    },
+    {
+      "label": "delete removes remembered profile",
+      "passed": true
+    },
+    {
+      "label": "new chat has no prior profile",
+      "passed": true
+    },
+    {
+      "label": "skip sends no saved profile",
+      "passed": true
+    },
+    {
+      "label": "draft hidden when pending",
+      "passed": true
+    },
+    {
+      "label": "draft sources hidden when pending",
+      "passed": true
+    },
+    {
+      "label": "draft hidden when withheld",
+      "passed": true
+    },
+    {
+      "label": "draft sources hidden when withheld",
+      "passed": true
+    },
+    {
+      "label": "no browser runtime errors",
+      "passed": true
+    }
+  ],
+  "externalRequestsBlocked": 0,
+  "mockChatRequests": 4,
+  "browserErrors": [],
+  "passed": true
+}

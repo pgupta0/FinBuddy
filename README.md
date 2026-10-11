@@ -30,6 +30,27 @@ The sections below document FinBuddy as it stands, not the upstream template.
 
 ---
 
+## Governance
+
+Every answer is governed by the **Advice-Boundary Governance Skill**
+([`governance/advice-boundary-skill.md`](./governance/advice-boundary-skill.md))
+and checked by deterministic rules ([`governance/rules.json`](./governance/rules.json)):
+
+- The model self-labels each answer GREEN / AMBER / RED in a hidden
+  machine-readable compliance block; the app re-checks the answer with code, and
+  the stricter label wins.
+- Advice the model failed to redirect is withheld and replaced by a standard
+  educational redirect; a missing disclaimer is added automatically.
+- PAN, Aadhaar, phone, email, account and folio numbers are masked before the
+  message reaches any model, and never written to logs.
+- Each turn is written to an audit log; RED, unresolved AMBER, distress,
+  grievance, repeated advice-seeking and other triggers go to a human review
+  queue (Upstash, when configured).
+- The risk-profile quiz runs under a documented product exception (skill
+  Section 5.1) that is pending governance sign-off.
+
+Run the deterministic half of the skill's test suite with `npm test`.
+
 ## Quickstart
 
 ### 1. Clone and install
@@ -289,14 +310,14 @@ the compaction layer contain no vendor names at all.
 | Parameter | Default | Options |
 |-----------|---------|---------|
 | `DEFAULT_VENDOR` | `"google"` | `"anthropic"`, `"google"`, `"openai"`, `"fireworks"` |
-| `DEFAULT_MODEL_ID` | `"gemini-3.5-flash"` | Any id in that vendor's catalog |
+| `DEFAULT_MODEL_ID` | `"gemini-3.6-flash"` | Any id in that vendor's catalog |
 | `PROVIDER_FALLBACK_ORDER` | google → openai → fireworks → anthropic | Order tried when the configured vendor has no key set |
 | `DEFAULT_MODE` | `"chat"` | `"chat"`, `"reasoning"` |
 | `DEFAULT_THINKING_LEVEL` | `"medium"` | `"off"`, `"low"`, `"medium"`, `"high"` — used when reasoning mode is triggered |
 | `CHAT_THINKING_LEVEL` | `"low"` | Thinking level in plain chat mode |
 | `MAX_OUTPUT_TOKENS` | `undefined` | Optional response-token cap; `undefined` = provider default. If set with Anthropic thinking enabled, must exceed the thinking budget in use |
 | `UTILITY_VENDOR` | `"google"` | Vendor for background tasks (moderation classifier, compaction summaries) |
-| `UTILITY_MODEL_ID` | `"gemini-3.5-flash-lite"` | A fast, cheap model — e.g. `claude-haiku-4-5` (anthropic), `gpt-5.4-mini` (openai) |
+| `UTILITY_MODEL_ID` | `"gemini-3.6-flash"` | A fast, cheap model — e.g. `claude-haiku-4-5` (anthropic), `gpt-5.4-mini` (openai) |
 
 The chat model and the utility model are independent: run chat on one vendor and
 background tasks on another, or set both to the same vendor to switch providers
@@ -322,14 +343,12 @@ per-request cost makes no sense for a public-facing educational chatbot.
 
 | Vendor | Model ID | Tier | Notes |
 |--------|----------|------|-------|
-| google | `gemini-3.5-flash-lite` | economy | Cheapest; good utility model |
-| google | `gemini-3.5-flash` | economy | **Default.** Free-tier eligible chat model |
+| google | `gemini-3.6-flash` | economy | **Default** chat and utility model; free-tier safe |
 | anthropic | `claude-haiku-4-5` | economy | Fast; thinking budget separate from output tokens |
 | anthropic | `claude-sonnet-4-6` | standard | 1M context |
 | anthropic | `claude-sonnet-5` | standard | Best speed/intelligence balance |
-| google | `gemini-3.8-flash` | standard | Newer Flash generation |
-| google | `gemini-2.5-flash` | economy | Older stable line |
-| google | `gemini-2.5-pro` | premium | Use sparingly |
+| google | `gemini-3.7-flash` | standard | |
+| google | `gemini-3.8-flash` | standard | Newest Flash generation |
 | openai | `gpt-5.6-luna` | economy | |
 | openai | `gpt-5.4-mini` | economy | |
 | openai | `gpt-5.6-terra` | standard | |

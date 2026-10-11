@@ -9,7 +9,9 @@ import { createMathPlugin } from "@streamdown/math";
 // enable inline $...$ math (plugin default only renders $$...$$ display math)
 const math = createMathPlugin({ singleDollarTextMath: true });
 
-type ResponseProps = ComponentProps<typeof Streamdown>;
+type ResponseProps = ComponentProps<typeof Streamdown> & {
+  isAnimating?: boolean;
+};
 
 // Allow all elements to render (override rehype-harden default blocking)
 const allowElement = () => true;
@@ -60,19 +62,29 @@ function sanitizeResponseText(text: string): string {
 }
 
 export const Response = memo(
-  ({ className, children, ...props }: ResponseProps) => (
-    <Streamdown
-      className={cn(
-        "size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
-        className
-      )}
-      plugins={{ code, math }}
-      animated
-      allowElement={allowElement}
-      {...props}
-    >
-      {typeof children === "string" ? sanitizeResponseText(children) : children}
-    </Streamdown>
-  ),
-  (prevProps, nextProps) => prevProps.children === nextProps.children
+  ({ className, children, isAnimating, ...props }: ResponseProps) => {
+    const shouldAnimate = isAnimating ?? false;
+    return (
+      <Streamdown
+        className={cn(
+          "size-full leading-relaxed [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
+          className
+        )}
+        plugins={{ code, math }}
+        animated={
+          shouldAnimate
+            ? { animation: "fadeIn", duration: 75, easing: "cubic-bezier(0.16, 1, 0.3, 1)" }
+            : false
+        }
+        isAnimating={shouldAnimate}
+        allowElement={allowElement}
+        {...props}
+      >
+        {typeof children === "string" ? sanitizeResponseText(children) : children}
+      </Streamdown>
+    );
+  },
+  (prevProps, nextProps) =>
+    prevProps.children === nextProps.children &&
+    prevProps.isAnimating === nextProps.isAnimating
 );

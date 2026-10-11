@@ -202,3 +202,27 @@ describe("scoreRiskProfile — suitability caps", () => {
       }
   });
 });
+
+
+describe("exhaustive risk engine invariants", () => {
+  it("checks all 1024 answer combinations, score arithmetic, caps and allocation bounds", async () => {
+    const letters = ["A", "B", "C", "D"];
+    const rank = {Conservative: 0, Moderate: 1, "Growth-oriented": 2, Aggressive: 3} as const;
+    let count = 0;
+    for (let n = 0; n < 1024; n++) {
+      const indexes = [0, 1, 2, 3, 4].map(i => (n >> (i * 2)) & 3);
+      const answers = indexes.map(i => letters[i]);
+      const out = await score(...answers as [string, string, string, string, string]);
+      expect(out.score).toBe(indexes.reduce((sum, i) => sum + i + 1, 0));
+      expect(rank[out.profile]).toBeLessThanOrEqual(rank[out.scoreBandProfile]);
+      expect(out.equityMin).toBeGreaterThanOrEqual(0);
+      expect(out.equityMax).toBeLessThanOrEqual(100);
+      expect(out.equityMin).toBeLessThanOrEqual(out.equityMax);
+      if (answers[3] === "A") expect(out.profile).toBe("Conservative");
+      if (answers[0] === "A") expect(rank[out.profile]).toBeLessThanOrEqual(rank.Moderate);
+      expect(out.capped).toBe(out.capReasons.length > 0);
+      count++;
+    }
+    expect(count).toBe(1024);
+  });
+});

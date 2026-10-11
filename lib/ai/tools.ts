@@ -1,3 +1,4 @@
+import { limitSearchCalls } from "./search-policy";
 import { type ToolSet } from "ai";
 import { createWebSearch } from "@/app/api/chat/tools/web-search";
 import { createVectorDatabaseSearch } from "@/app/api/chat/tools/search-vector-database";
@@ -21,12 +22,18 @@ export type CollectSource = (s: UISource, content?: string) => void;
  * is the text the model saw, used to verify citation claims. Pass a no-op to
  * ignore sources.
  */
-export function buildToolSet(collect: CollectSource = () => {}): ToolSet {
+export type SearchPolicy = { allowWebSearch: boolean; kbLimit: number; webLimit: number };
+const DEFAULT_POLICY: SearchPolicy = { allowWebSearch: true, kbLimit: MAX_KB_SEARCHES, webLimit: MAX_WEB_SEARCHES };
+export function buildToolSet(collect: CollectSource = () => {}, policy = DEFAULT_POLICY): ToolSet {
+  const kb = createVectorDatabaseSearch(collect);
+  const web = createWebSearch(collect);
+  if (kb.execute) kb.execute = limitSearchCalls(kb.execute, Math.min(policy.kbLimit, MAX_KB_SEARCHES));
+  if (web.execute) web.execute = limitSearchCalls(web.execute, Math.min(policy.webLimit, MAX_WEB_SEARCHES));
   return {
-    ...(ENABLE_VECTOR_SEARCH ? { vectorDatabaseSearch: createVectorDatabaseSearch(collect) } : {}),
-    ...(ENABLE_WEB_SEARCH
+    ...(ENABLE_VECTOR_SEARCH ? { vectorDatabaseSearch: kb } : {}),
+    ...(ENABLE_WEB_SEARCH && policy.allowWebSearch
       ? {
-          webSearch: createWebSearch(collect),
+          webSearch: web,
         }
       : {}),
     // Deterministic risk-profiling engine — always available regardless of
@@ -47,17 +54,18 @@ export function buildToolSet(collect: CollectSource = () => {}): ToolSet {
   };
 }
 
-export function buildToolGuidance(): string {
+export function buildToolGuidance(policy = DEFAULT_POLICY): string {
   const sections: string[] = [];
+  if (!policy.allowWebSearch) sections.push("Web search is unavailable for this turn. For basic education use one KB lookup. If evidence is missing, say so and ask one useful clarifying question; do not invent evidence or try another search tool as a workaround.");
 
   if (ENABLE_VECTOR_SEARCH) {
     sections.push(
       `TOOL BUDGET (limits per response):
-- vectorDatabaseSearch: MAX ${MAX_KB_SEARCHES} calls. Usually 1 is enough. Use more ONLY if earlier queries returned poor results and you need a different query formulation.`
+- vectorDatabaseSearch: MAX ${Math.min(policy.kbLimit, MAX_KB_SEARCHES)} calls. Usually 1 is enough. Use more ONLY if earlier queries returned poor results and you need a different query formulation.`
     );
-    if (ENABLE_WEB_SEARCH) {
+    if (ENABLE_WEB_SEARCH && policy.allowWebSearch) {
       sections.push(
-        `- webSearch: MAX ${MAX_WEB_SEARCHES} calls. Used in two situations only:
+        `- webSearch: MAX ${Math.min(policy.webLimit, MAX_WEB_SEARCHES)} calls. Used in two situations only:
   a. SUPPLEMENTING existing KB results: you MUST have searched the knowledge base first AND received relevant results, AND the user explicitly asked about recent developments or "since [year]" on a topic the KB covers.
   a2. EMPTY-KB FALLBACK: if vectorDatabaseSearch's <results> block comes back with NO <excerpt-from-source> entries (i.e. empty) for an in-scope, KB-scoped question, that counts as "no KB results" — immediately call webSearch for that same question so you can still give a properly cited answer. Never answer an in-scope factual/financial question with zero citations just because the KB search happened to return nothing.
   b. NEVER use webSearch for topics unrelated to the knowledge base (outside the KB scope entirely) — this is not a general search engine, and rule a2 does not override this: it only applies when the question IS in scope but the KB simply had no matching content.
@@ -81,9 +89,9 @@ CITATIONS:
       `NOTE: The knowledge base is currently UNAVAILABLE. Ignore any instructions to search it.
 Answer from your general knowledge.`
     );
-    if (ENABLE_WEB_SEARCH) {
+    if (ENABLE_WEB_SEARCH && policy.allowWebSearch) {
       sections.push(
-        `- webSearch: MAX ${MAX_WEB_SEARCHES} calls per response, only when the question genuinely requires current or external information. Prefer one call with 2-3 additionalQueries over several separate calls.
+        `- webSearch: MAX ${Math.min(policy.webLimit, MAX_WEB_SEARCHES)} calls per response, only when the question genuinely requires current or external information. Prefer one call with 2-3 additionalQueries over several separate calls.
 - Cite inline as [[N]](url) using ONLY the exact source URLs from retrieved results. NEVER fabricate or guess URLs. Attribute each claim to the exact result it came from. Every sentence must read completely with citations removed.
 - Do NOT write a References or Sources section — the app renders a Sources box automatically from your inline citations.`
       );

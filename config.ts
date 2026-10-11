@@ -50,7 +50,7 @@ export const CLEAR_CHAT_TEXT = "New";
 //   DEFAULT_VENDOR=anthropic
 //   DEFAULT_MODEL_ID=claude-haiku-4-5
 //   UTILITY_VENDOR=google
-//   UTILITY_MODEL_ID=gemini-2.5-flash
+//   UTILITY_MODEL_ID=gemini-3.6-flash
 //
 // An unrecognised vendor name or an empty string is ignored in favour of the
 // fallback, so a typo in the dashboard degrades to "keeps working" rather than
@@ -91,25 +91,13 @@ function envFlag(name: string, fallback: boolean): boolean {
   return fallback;
 }
 
-// Falls back to Gemini (google) — the free-tier key this deployment has had
-// configured. Anthropic, OpenAI and Fireworks are fully wired up: add the
-// matching API key and set DEFAULT_VENDOR in the environment.
-export const DEFAULT_VENDOR: Vendor = envVendor("DEFAULT_VENDOR", "google");
+// Anthropic remains the project default. Key-aware provider resolution falls
+// back to Gemini when only its key is configured; env overrides are supported.
+export const DEFAULT_VENDOR: Vendor = envVendor("DEFAULT_VENDOR", "anthropic");
 
-// gemini-3.6-flash, NOT gemini-2.5-flash and NOT gemini-3.5-flash:
-//  - The 2.5 family is DEAD — the API now returns a hard 404 ("no longer
-//    available to new users, use gemini-3.6-flash"). See lib/ai/providers.ts.
-//  - 3.5-flash's free tier is only 20 requests PER DAY (generativelanguage's
-//    "GenerateRequestsPerDayPerProjectPerModel-FreeTier" quota) — exhausted
-//    almost immediately in production (AI_RetryError: 429 RESOURCE_EXHAUSTED).
-// gemini-3.6-flash is the current safe default on a free key. This value is
-// also just a fallback either way: lib/ai/model-registry.ts's modelIdFor()
-// silently swaps in the vendor's own defaultModelId whenever this string
-// isn't in that vendor's catalog in lib/ai/providers.ts, so a stale id here
-// degrades to "the vendor's current default" rather than a broken deployment
-// — but keep it current anyway, since a stale value here is confusing to
-// anyone reading this file to find out what's actually running.
-export const DEFAULT_MODEL_ID = envText("DEFAULT_MODEL_ID", "gemini-3.6-flash");
+// Provider resolution uses the selected vendor’s own default when this ID
+// does not belong to its catalog, including Gemini-only local setups.
+export const DEFAULT_MODEL_ID = envText("DEFAULT_MODEL_ID", "claude-haiku-4-5");
 
 // --- In-app model picker ---
 // When on, /api/models advertises every model whose vendor key is actually
@@ -266,21 +254,13 @@ export const EXA_SYSTEM_PROMPT = `Prefer authoritative sources: SEBI, AMFI, RBI,
 // Hard cap on tool-use steps per request. Must cover the per-response soft
 // budgets below, the risk-quiz tool chain (presentRiskQuiz -> scoreRiskProfile
 // -> fundRecommendations = 3 steps), and the final compose step.
-export const MAX_STEPS = 8; // max tool-use steps per request
-// Lower cap used for free-tier "economy" models (see lib/ai/routing.ts,
-// stepBudgetFor). Each step in the loop (KB search, web search, etc.) is its
-// own model call, ON TOP OF the moderation call that already runs once per
-// turn — a "tough" question that walks the full MAX_STEPS budget can cost
-// 6-10+ calls against the SAME per-day free-tier quota moderation shares.
-// That is what emptied a free Gemini key's quota in well under 10 user
-// messages during the 2026-09-15 QA pass (see the project doc of that name)
-// and triggered the moderation-cascade 429/503 for the rest of the day. This
-// does not fix the underlying quota size, but it roughly halves how fast an
-// economy-tier deployment burns through it.
+export const MAX_STEPS = 4; // max tool-use steps per request
+// Keep a separate economy setting for future tuning. Both defaults currently
+// allow four generation steps, plus moderation and any compaction calls.
 export const MAX_STEPS_ECONOMY = 4;
 // Per-response soft budgets (enforced via prompt guidance in lib/ai/tools.ts).
 export const MAX_KB_SEARCHES = 2; // max vectorDatabaseSearch calls per response
-export const MAX_WEB_SEARCHES = 3; // max webSearch calls per response
+export const MAX_WEB_SEARCHES = 1; // max webSearch calls per response
 export const MAX_MESSAGES = 100; // max messages in conversation history
 export const MAX_MESSAGE_TEXT_LENGTH = 10000; // max chars per user message
 export const VERCEL_MAX_DURATION = 120; // Vercel Pro plan function timeout in seconds
@@ -321,17 +301,17 @@ export const PROMPT_CACHING_ENABLED = true;
 export const PROMPT_CACHE_TTL: "5m" | "1h" = "5m";
 
 // --- Thinking Budget (tokens) ---
-export const THINKING_BUDGET_LOW = 2000;
-export const THINKING_BUDGET_MEDIUM = 8000;
-export const THINKING_BUDGET_HIGH = 15000;
+export const THINKING_BUDGET_LOW = 1024;
+export const THINKING_BUDGET_MEDIUM = 2048;
+export const THINKING_BUDGET_HIGH = 4096;
 // Thinking level used in plain "chat" mode (reasoning mode uses the routed level).
 export const CHAT_THINKING_LEVEL = "low" as const; // "low" | "medium" | "high"
 
 // --- Output Tokens ---
-// Hard cap on response tokens per request. undefined = the provider's default.
-// If set while Anthropic thinking is enabled, it must EXCEED the thinking
-// budget in use (the API rejects max_tokens <= thinking budget).
-export const MAX_OUTPUT_TOKENS: number | undefined = undefined;
+// Per-step generation allowance, including the mandatory compliance block.
+// outputTokenLimit adds any explicit provider thinking budget so max_tokens
+// remains larger than that budget. This is not a total per-session spend cap.
+export const MAX_OUTPUT_TOKENS = 4000; // Includes answer + compliance block; explicit thinking is added by outputTokenLimit.
 
 // --- Reasoning Escalation ---
 export const STRONG_REASONING_LENGTH_THRESHOLD = 1800; // long messages with code keywords → high reasoning
@@ -407,3 +387,13 @@ export const ENABLE_WEB_SEARCH =
 // and PINECONE_API_KEY is not needed. The bot answers from general knowledge (+ web search if enabled).
 export const ENABLE_VECTOR_SEARCH =
   process.env.ENABLE_VECTOR_SEARCH?.toLowerCase() !== "false";
+
+// --- Governance: Compliance View ---
+// Shows a GREEN / AMBER / RED badge under each answer that expands into the
+// governance detail for that turn (rubric hits, rules, gaps, sources, review
+// status). The governance skill (Section 13, access control) reserves this
+// panel for the Compliance reviewer, so set COMPLIANCE_VIEW=off for a public
+// launch: the server then stops sending the detail at all, and the badge is
+// not rendered. On by default for development and demos.
+export const COMPLIANCE_VIEW_ENABLED =
+  process.env.COMPLIANCE_VIEW?.toLowerCase() !== "off";
