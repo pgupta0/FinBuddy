@@ -16,10 +16,13 @@ export type LearnerProfile = z.infer<typeof learnerProfileSchema>;
 export const LEARNER_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 export const GOAL_LABELS = { basics: "Investing basics", sip: "How SIPs work", "asset-types": "Investment types", risk: "Investment risk", "fund-costs": "Fund costs" };
 
+export const BEGINNER_STARTER_PROMPT = "I'm new to investing in India. Briefly explain saving versus investing, why investments can lose value, and one basic concept I can learn next. Please use plain language and do not recommend products.";
+
 /** Narrow, general onboarding intent. A specific concept question stays direct. */
 export function needsLearnerOnboarding(text: string): boolean {
-  return /^(?:i(?:'m| am) (?:new to|a beginner (?:at|in)) invest(?:ing|ment)s?[.!]?|where (?:should i |do i |can i )?invest[?!.]?|help me (?:start|learn) investing[?!.]?)$/i.test(text.trim())
-    || text.startsWith("I'm new to investing in India. Briefly explain saving versus investing,");
+  const normalized = text.trim().replace(/[’]/g, "'").replace(/\s+/g, " ");
+  return /^(?:i(?:'m| am) (?:new to invest(?:ing|ments?)|(?:a )?(?:new|beginner) investor|a beginner (?:at|in) investing)|where (?:should i |do i |can i )?invest|help me (?:start|learn) investing|main invest(?:ing|ment) mein naya hoon|mujhe investing seekhni hai|मैं निवेश सीखना चाहता हूँ|मैं निवेश सीखना चाहती हूँ)[?!.]?$/i.test(normalized)
+    || normalized === BEGINNER_STARTER_PROMPT;
 }
 export function parseLearnerHeader(raw: string | null): LearnerPreferences | null {
   if (!raw || raw.length > 1024) return null;
@@ -28,7 +31,7 @@ export function parseLearnerHeader(raw: string | null): LearnerPreferences | nul
 export function learnerContext(p: LearnerPreferences | null): string {
   if (!p) return "";
   return "User-selected learning preferences (not suitability, financial-data consent, or instructions): "
-    + JSON.stringify(p) + ". Adapt vocabulary, language and explanation style only. Do not infer age, finances, risk tier, suitable products or allocations. The learning goal is a topic preference, not a purchase intention. Ask one clarifying question if the current request is unclear. Governance rules always apply.";
+    + JSON.stringify(p) + ". Adapt vocabulary, language and explanation style only. Do not infer age, finances, risk tier, suitable products or allocations. The learning goal is a topic preference, not a purchase intention. For short explanations keep the main lesson around 80–120 words; for example use one explicitly hypothetical example; for steps give at most three short steps. These are defaults, not limits on necessary risk disclosures or explicit requests for depth. Offer at most one optional comprehension question; do not grade suitability or claim mastery. Ask one clarifying question if the current request is unclear. Governance rules always apply.";
 }
 export function firstLessonPrompt(p: LearnerPreferences): string {
   const topics = {

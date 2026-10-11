@@ -1,9 +1,10 @@
 // Focused beginner journeys grounded in the existing knowledge base.
+import { BEGINNER_STARTER_PROMPT } from "./learner-profile";
 import { BookOpen, Repeat2, LayoutGrid, ShieldCheck, BadgeIndianRupee, ClipboardList, type LucideIcon } from "lucide-react";
 export type StarterPrompt = { id: string; label: string; hint: string; prompt: string; icon: LucideIcon; };
 export const STARTER_PROMPTS: StarterPrompt[] = [
   { id: "investing-basics", label: "I’m new to investing", hint: "Learn the basics first",
-    prompt: "I'm new to investing in India. Briefly explain saving versus investing, why investments can lose value, and one basic concept I can learn next. Please use plain language and do not recommend products.", icon: BookOpen },
+    prompt: BEGINNER_STARTER_PROMPT, icon: BookOpen },
   { id: "understand-sip", label: "How does a SIP work?", hint: "Understand regular investing",
     prompt: "What is a SIP and how does it work? Explain briefly with one clearly hypothetical example, and explain that regular investing does not guarantee returns. Do not recommend a scheme.", icon: Repeat2 },
   { id: "investment-types", label: "Explore investment types", hint: "Equity, debt, gold and cash",

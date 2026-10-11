@@ -24,3 +24,12 @@ export function saveLearnerProfile(id: string, profile: LearnerProfile): boolean
 export function deleteLearnerProfile(id: string): void {
   try { if (typeof window !== "undefined") localStorage.removeItem(PREFIX + id); } catch { /* Storage may be disabled. */ }
 }
+
+/** Refresh remembered records on use; an open tab must not outlive expiry or deletion. */
+export function currentLearnerProfile(id: string, cache: Map<string, LearnerProfile>): LearnerProfile | null {
+  const session = cache.get(id);
+  if (session && !session.rememberOnDevice) return session;
+  const stored = loadLearnerProfile(id);
+  if (stored) cache.set(id, stored); else cache.delete(id);
+  return stored;
+}

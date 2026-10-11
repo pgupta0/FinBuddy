@@ -8,6 +8,7 @@ import {
   createUIMessageStream,
   createUIMessageStreamResponse,
 } from "ai";
+import { parseChatInput } from "@/lib/ai/chat-input";
 import { ensureEnv } from "@/lib/env";
 import { SYSTEM_PROMPT } from "@/prompts";
 import { outputTokenLimit } from "@/lib/ai/output-budget";
@@ -139,14 +140,15 @@ function createPlainTextResponse(message: string, compliance?: ReturnType<typeof
 
 export async function POST(req: Request) {
   // --- Parse and validate request body ---
-  let body: any;
+  let body: unknown;
   try {
     body = await req.json();
   } catch {
     return jsonError("Invalid JSON in request body.", 400);
   }
 
-  const rawMessages: UIMessage[] = body.messages ?? [];
+  const rawMessages = parseChatInput(body);
+  if (!rawMessages) return jsonError("Invalid conversation. Send valid user/assistant messages within the configured limits.", 400);
 
   // Read compaction summary from request headers (client sends via headers, not body).
   // The summary enters the model context as trusted history, so it is only

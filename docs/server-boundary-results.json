@@ -1,0 +1,29 @@
+{
+  "offline": true,
+  "results": [
+    {
+      "name": "null body",
+      "status": 400,
+      "expected": 400,
+      "passed": true
+    },
+    {
+      "name": "system role",
+      "status": 400,
+      "expected": 400,
+      "passed": true
+    },
+    {
+      "name": "invalid text",
+      "status": 400,
+      "expected": 400,
+      "passed": true
+    },
+    {
+      "name": "beginner clarification",
+      "status": 200,
+      "expected": 200,
+      "passed": true
+    }
+  ]
+}

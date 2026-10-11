@@ -2,7 +2,7 @@
 
 import { LearnerOnboarding } from "@/components/learner-onboarding";
 import { needsLearnerOnboarding, firstLessonPrompt, type LearnerProfile } from "@/lib/learner-profile";
-import { loadLearnerProfile, saveLearnerProfile, deleteLearnerProfile } from "@/lib/learner-profile-storage";
+import { loadLearnerProfile, saveLearnerProfile, deleteLearnerProfile, currentLearnerProfile } from "@/lib/learner-profile-storage";
 import { visibleAssistantText } from "@/lib/governance/display";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Controller, useForm } from "react-hook-form";
@@ -152,7 +152,7 @@ export default function Chat() {
             headers.set("X-Feedback", btoa(JSON.stringify(fb)));
           }
         }
-        const learning = activeConvIdRef.current ? learnerProfiles.get(activeConvIdRef.current) : null;
+        const learning = activeConvIdRef.current ? currentLearnerProfile(activeConvIdRef.current, learnerProfiles) : null;
         if (learning) headers.set("X-Learner-Preferences", JSON.stringify(learning.preferences));
         // Model chosen in the header picker. The server treats these as
         // untrusted and re-validates them against the catalog and the keys it
@@ -357,7 +357,7 @@ export default function Chat() {
     const trimmed = text.trim();
     if (!trimmed && files.length === 0) return;
     const id = activeConvIdRef.current;
-    if (files.length === 0 && id && !learnerProfiles.has(id) && needsLearnerOnboarding(trimmed)) {
+    if (files.length === 0 && id && !currentLearnerProfile(id, learnerProfiles) && needsLearnerOnboarding(trimmed)) {
       pendingLesson.current = trimmed;
       setLearnerInitial(null);
       setLearnerOpen(true);
@@ -384,8 +384,11 @@ export default function Chat() {
     if (!id) return;
     const startLesson = pendingLesson.current !== null;
     if (startLesson) profile = { ...profile, exploredTopics: [...new Set([...profile.exploredTopics, profile.preferences.goal])] };
+    if (!saveLearnerProfile(id, profile)) {
+      profile = { ...profile, rememberOnDevice: false };
+      toast.error("Could not save on this device. Preferences are available for this page session.");
+    }
     learnerProfiles.set(id, profile);
-    if (!saveLearnerProfile(id, profile)) toast.error("Could not save on this device. Preferences are available for this page session.");
     setLearnerOpen(false);
     pendingLesson.current = null;
     if (startLesson) void submitText(firstLessonPrompt(profile.preferences));
@@ -813,7 +816,7 @@ export default function Chat() {
 
             <div className="mt-2 text-center text-xs text-muted-foreground">
               <span className="hidden sm:inline">&copy; {new Date().getFullYear()} {OWNER_NAME} &middot;{" "}</span>
-              <button type="button" disabled={status === "streaming" || status === "submitted"} onClick={() => { pendingLesson.current = null; setLearnerInitial(activeConvId ? learnerProfiles.get(activeConvId) ?? null : null); setLearnerOpen(true); }} className="mr-2 underline">Learning preferences</button>
+              <button type="button" disabled={status === "streaming" || status === "submitted"} onClick={() => { pendingLesson.current = null; setLearnerInitial(activeConvId ? currentLearnerProfile(activeConvId, learnerProfiles) : null); setLearnerOpen(true); }} className="mr-2 underline">Learning preferences</button>
               <Link href="/terms" className="underline">
                 Terms of Use
               </Link>{" "}

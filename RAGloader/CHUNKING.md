@@ -7,7 +7,7 @@ Its defaults reflect that: ~3,000-character parents (about one paper section),
 visual layout analysis, formula-to-LaTeX repair, figure re-rendering, page
 furniture removal.
 
-FinBuddy's knowledge base is none of that. It is eight markdown files:
+FinBuddy's knowledge base is none of that. It is eleven markdown files:
 
 | File | Shape |
 |---|---|
@@ -19,6 +19,9 @@ FinBuddy's knowledge base is none of that. It is eight markdown files:
 | `strategy-core-satellite.md` | One explainer, a few sections |
 | `strategy-endowment-style.md` | One explainer, a few sections |
 | `strategy-risk-parity.md` | One explainer, a few sections |
+| `worked-example-expense-ratio-cost-of-fees.md` | Hypothetical arithmetic example |
+| `verifying-guaranteed-return-schemes.md` | Fraud-awareness explanation |
+| `capital-gains-tax-current-rules-fy2025-26.md` | Dated tax explainer requiring release-time verification |
 
 No figures. No tables-as-images. No equations. No page headers. Every
 PDF-specific parsing stage is therefore a no-op that costs time and API credits
